@@ -23,8 +23,7 @@ const server = app.listen(PORT, () => {
 })
 
 // ─── Scheduled jobs (morning/evening reports, subscription reminders) ─────────
-// TODO: re-enable once deployment is stable — temporarily disabled for diagnostics
-// startScheduler()
+startScheduler()
 
 // ─── Graceful shutdown (Railway sends SIGTERM on redeploy) ────────────────────
 async function shutdown(signal: string): Promise<void> {
