@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Global schema tables ──────────────────────────────────────────────────
+// These live in the public schema and are shared across all tenants.
+// Per-tenant tables (items, sales, purchases, etc.) are created dynamically
+// in each tenant's own schema (tenant_{uuid}) when they sign up.
+
+model Tenant {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessName       String    @db.VarChar(255)
+  businessType       String?   @db.VarChar(100)
+  ownerName          String    @db.VarChar(255)
+  ownerPhone         String    @unique @db.VarChar(20)
+  schemaName         String    @unique @db.VarChar(100)
+  country            String    @default("UG") @db.VarChar(10)
+  currency           String    @default("UGX") @db.VarChar(10)
+  timezone           String    @default("Africa/Kampala") @db.VarChar(50)
+  onboardingComplete Boolean   @default(false)
+  createdAt          DateTime  @default(now()) @db.Timestamptz()
+  updatedAt          DateTime  @updatedAt @db.Timestamptz()
+  deletedAt          DateTime? @db.Timestamptz()
+
+  subscriptions       Subscription[]
+  paymentTransactions PaymentTransaction[]
+  platformSuppliers   PlatformSupplier[]
+
+  @@map("tenants")
+}
+
+model Subscription {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String    @db.Uuid
+  plan          String    @default("free") @db.VarChar(20)
+  status        String    @default("active") @db.VarChar(20)
+  amountUgx     Int       @default(0)
+  startedAt     DateTime  @default(now()) @db.Timestamptz()
+  expiresAt     DateTime? @db.Timestamptz()
+  paymentMethod String?   @db.VarChar(20)
+  paymentPhone  String?   @db.VarChar(20)
+  createdAt     DateTime  @default(now()) @db.Timestamptz()
+  updatedAt     DateTime  @updatedAt @db.Timestamptz()
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("subscriptions")
+}
+
+model PaymentTransaction {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String   @db.Uuid
+  provider          String   @db.VarChar(20)
+  providerReference String?  @db.VarChar(255)
+  amountUgx         Int
+  status            String   @default("pending") @db.VarChar(20)
+  type              String   @db.VarChar(20)
+  phone             String   @db.VarChar(20)
+  createdAt         DateTime @default(now()) @db.Timestamptz()
+  updatedAt         DateTime @updatedAt @db.Timestamptz()
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("payment_transactions")
+}
+
+model PlatformSupplier {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String?  @db.Uuid
+  name       String   @db.VarChar(255)
+  phone      String?  @db.VarChar(20)
+  location   String?  @db.VarChar(255)
+  categories String[]
+  verified   Boolean  @default(false)
+  createdAt  DateTime @default(now()) @db.Timestamptz()
+  updatedAt  DateTime @updatedAt @db.Timestamptz()
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@map("platform_suppliers")
+}
