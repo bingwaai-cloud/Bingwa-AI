@@ -14,7 +14,7 @@ const PORT = Number(process.env['PORT']) || 3000
 
 const app = createApp()
 
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   logger.info({
     event: 'server_started',
     port: PORT,
