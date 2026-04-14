@@ -21,12 +21,8 @@ export function validateEnv(): void {
       'WHATSAPP_APP_SECRET',
       'WHATSAPP_PHONE_NUMBER_ID',
       'WHATSAPP_VERIFY_TOKEN',
-      'MTN_MOMO_SUBSCRIPTION_KEY',
-      'MTN_MOMO_API_USER',
-      'MTN_MOMO_API_KEY',
-      'MTN_MOMO_BASE_URL',
-      'MTN_MOMO_ENVIRONMENT',
       'API_URL'
+      // MTN_MOMO_* added here once MoMo credentials are obtained
     )
   }
 
