@@ -81,6 +81,16 @@ export async function processWebhookPayload(body: MetaWebhookBody): Promise<void
             continue
           }
 
+          // Handle START keyword: opt customer back in to marketing broadcasts
+          if (message.text.body.trim().toUpperCase() === 'START') {
+            setImmediate(() => {
+              void handleStartRequest(message.from).catch((err) => {
+                logger.error({ event: 'start_handling_error', messageId: message.id, err })
+              })
+            })
+            continue
+          }
+
           // Process in background — don't await here so webhook returns 200 fast
           // Meta will retry if we don't respond within 20 seconds
           setImmediate(() => {
@@ -135,5 +145,30 @@ async function handleStopRequest(fromPhone: string): Promise<void> {
   await sendTextMessage(
     phone,
     'You have been unsubscribed from marketing messages. Reply START to re-subscribe anytime.'
+  )
+}
+
+/**
+ * Handle a START message: opt the customer back in to marketing broadcasts.
+ * Looks up the customer record by phone and sets opted_in_marketing = true.
+ */
+async function handleStartRequest(fromPhone: string): Promise<void> {
+  const { sendTextMessage } = await import('./whatsappClient.js')
+  const { normalizePhone, schemaNameFromTenantId } = await import('../utils/phone.js')
+  const { findTenantByOwnerPhone } = await import('../repositories/tenantRepository.js')
+  const { optInMarketing } = await import('../repositories/customersRepository.js')
+
+  const phone = normalizePhone(fromPhone)
+  const tenant = await findTenantByOwnerPhone(phone)
+
+  if (tenant) {
+    const schemaName = schemaNameFromTenantId(tenant.id)
+    await optInMarketing(schemaName, tenant.id, phone)
+    logger.info({ event: 'marketing_opt_in', phone: phone.slice(0, 6) + '****' })
+  }
+
+  await sendTextMessage(
+    phone,
+    'You are now subscribed to offers and updates. Reply STOP anytime to unsubscribe.'
   )
 }

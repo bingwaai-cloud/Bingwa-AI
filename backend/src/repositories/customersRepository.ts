@@ -249,6 +249,24 @@ export async function optOutMarketing(
 }
 
 /**
+ * Opt a customer back in to marketing broadcasts (START keyword handler).
+ */
+export async function optInMarketing(
+  schemaName: string,
+  tenantId: string,
+  phone: string
+): Promise<void> {
+  await db.$executeRaw`
+    UPDATE ${Prisma.raw(`"${schemaName}".customers`)}
+    SET    opted_in_marketing = true,
+           updated_at         = NOW()
+    WHERE  phone     = ${phone}
+    AND    tenant_id = ${tenantId}::uuid
+    AND    deleted_at IS NULL
+  `
+}
+
+/**
  * Return all opted-in phones for a marketing broadcast.
  */
 export async function findOptedInPhones(

@@ -1,18 +1,23 @@
 import { sendTextMessage } from './whatsappClient.js'
 import { findTenantByOwnerPhone } from '../repositories/tenantRepository.js'
 import { findAllItems } from '../repositories/itemRepository.js'
+import { findSales } from '../repositories/salesRepository.js'
 import { upsertUserContext, saveInteractionPair } from '../repositories/userContextRepository.js'
 import { parseIntent } from '../nlp/intentParser.js'
 import { formatUGX, formatUGXShort } from '../nlp/normalizers.js'
 import { createSaleRecord, getTodaySummary } from '../services/salesService.js'
 import { createPurchaseRecord } from '../services/purchasesService.js'
 import { addItem, getLowStockItems, listItems } from '../services/inventoryService.js'
+import { addCustomer } from '../services/customersService.js'
+import { createSupplierRecord } from '../services/suppliersService.js'
+import { recordExpense } from '../services/expensesService.js'
+import { previewBroadcast, sendBroadcast } from '../services/marketingService.js'
 import { logger } from '../utils/logger.js'
 import { normalizePhone, maskPhone, schemaNameFromTenantId } from '../utils/phone.js'
 import type { UserContext, InventoryItem, ParsedIntent } from '../nlp/types.js'
 
 /**
- * Main WhatsApp message handler — Week 2.
+ * Main WhatsApp message handler — Session 9.
  *
  * Flow:
  * 1. Identify tenant by phone number
@@ -116,6 +121,16 @@ export async function handleIncomingMessage(
       reply = await handleAddItem(tenant.id, schemaName, intent)
     } else if (intent.action === 'report') {
       reply = await handleReport(tenant.id, schemaName)
+    } else if (intent.action === 'customer_add') {
+      reply = await handleCustomerAdd(tenant.id, schemaName, phone, intent)
+    } else if (intent.action === 'supplier_add') {
+      reply = await handleSupplierAdd(tenant.id, schemaName, intent)
+    } else if (intent.action === 'expense') {
+      reply = await handleExpense(tenant.id, schemaName, intent)
+    } else if (intent.action === 'marketing') {
+      reply = await handleMarketing(tenant.id, schemaName, phone, intent, tenant.businessName)
+    } else if (intent.action === 'receipt') {
+      reply = await handleReceipt(tenant.id, schemaName, intent)
     } else {
       reply =
         "I didn't catch that. Try:\n\u2022 'sold 2 sugar at 6500'\n\u2022 'bought 5 flour 70k each'\n\u2022 'stock check'\n\u2022 'report'"
@@ -162,20 +177,20 @@ async function handleSaleIntent(
   intent: ParsedIntent,
   inventory: InventoryItem[]
 ): Promise<string> {
-  if (!intent.item && !intent.item) {
+  if (!intent.item) {
     return "Which item did you sell? Try: 'sold 2 sugar at 6500'"
   }
   if (!intent.qty) {
-    return `How many ${intent.item ?? 'units'} did you sell?`
+    return `How many ${intent.item} did you sell?`
   }
   if (!intent.unitPrice && !intent.totalPrice) {
-    return `What was the price for ${intent.item ?? 'that item'}?`
+    return `What was the price for ${intent.item}?`
   }
 
   const qty = intent.qty
   const unitPrice = intent.unitPrice ?? Math.round((intent.totalPrice ?? 0) / qty)
   const totalPrice = intent.totalPrice ?? unitPrice * qty
-  const itemName = intent.item ?? intent.item ?? 'item'
+  const itemName = intent.item
 
   const result = await createSaleRecord(tenantId, schemaName, {
     itemName,
@@ -188,9 +203,10 @@ async function handleSaleIntent(
   })
 
   const { sale, stockRemaining, isLowStock } = result
-  const unit = inventory.find(
-    (i) => i.nameNormalized === (intent.itemNormalized ?? itemName.toLowerCase())
-  )?.unit ?? 'units'
+  const unit =
+    inventory.find(
+      (i) => i.nameNormalized === (intent.itemNormalized ?? itemName.toLowerCase())
+    )?.unit ?? 'units'
 
   let reply =
     `\u2705 Sale recorded\n` +
@@ -215,20 +231,20 @@ async function handlePurchaseIntent(
   intent: ParsedIntent,
   inventory: InventoryItem[]
 ): Promise<string> {
-  if (!intent.item && !intent.item) {
+  if (!intent.item) {
     return "What did you buy? Try: 'bought 10 sugar at 5000 each'"
   }
   if (!intent.qty) {
-    return `How many ${intent.item ?? 'units'} did you buy?`
+    return `How many ${intent.item} did you buy?`
   }
   if (!intent.unitPrice && !intent.totalPrice) {
-    return `What was the price for ${intent.item ?? 'that item'}?`
+    return `What was the price for ${intent.item}?`
   }
 
   const qty = intent.qty
   const unitPrice = intent.unitPrice ?? Math.round((intent.totalPrice ?? 0) / qty)
   const totalPrice = intent.totalPrice ?? unitPrice * qty
-  const itemName = intent.item ?? intent.item ?? 'item'
+  const itemName = intent.item
 
   const result = await createPurchaseRecord(tenantId, schemaName, {
     itemName,
@@ -242,9 +258,10 @@ async function handlePurchaseIntent(
   })
 
   const { purchase, stockAfter } = result
-  const unit = inventory.find(
-    (i) => i.nameNormalized === (intent.itemNormalized ?? itemName.toLowerCase())
-  )?.unit ?? 'units'
+  const unit =
+    inventory.find(
+      (i) => i.nameNormalized === (intent.itemNormalized ?? itemName.toLowerCase())
+    )?.unit ?? 'units'
 
   return (
     `\u2705 Purchase recorded\n` +
@@ -262,7 +279,7 @@ async function handleStockCheck(
   inventory: InventoryItem[]
 ): Promise<string> {
   // Specific item query
-  if (intent.item || intent.itemNormalized) {
+  if (intent.item ?? intent.itemNormalized) {
     const searchKey = (intent.itemNormalized ?? intent.item ?? '').toLowerCase()
     const target = inventory.find(
       (i) =>
@@ -303,7 +320,7 @@ async function handleAddItem(
   schemaName: string,
   intent: ParsedIntent
 ): Promise<string> {
-  const name = intent.item ?? intent.item
+  const name = intent.item
   if (!name) {
     return "What item do you want to add?\nTry: 'add item gumboots, qty 20, sell price 35000'"
   }
@@ -336,5 +353,212 @@ async function handleReport(tenantId: string, schemaName: string): Promise<strin
     `Sales: ${summary.saleCount} transactions\n` +
     `Revenue: ${revenue}\n` +
     `Items: ${inventory.total} total, ${inventory.lowStockCount} low stock`
+  )
+}
+
+async function handleCustomerAdd(
+  tenantId: string,
+  schemaName: string,
+  recordedBy: string,
+  intent: ParsedIntent
+): Promise<string> {
+  if (!intent.customerName && !intent.customerPhone) {
+    return "Who do you want to add?\nTry: 'add customer John Mukasa 0772123456'"
+  }
+
+  const customer = await addCustomer(tenantId, schemaName, {
+    name:   intent.customerName ?? undefined,
+    phone:  intent.customerPhone ?? undefined,
+    source: 'whatsapp',
+  })
+
+  const name  = customer.name  ?? intent.customerName  ?? 'Customer'
+  const phone = customer.phone ?? intent.customerPhone ?? ''
+
+  // addCustomer returns existing record on duplicate — detect via timestamps
+  const isExisting =
+    Math.abs(customer.createdAt.getTime() - customer.updatedAt.getTime()) > 1000
+
+  if (isExisting) {
+    return `${name} is already in your customer records${phone ? ` (${phone})` : ''}`
+  }
+
+  return (
+    `\u2705 Customer added\n` +
+    `Name: ${name}` +
+    (phone ? `\nPhone: ${phone}` : '') +
+    (intent.notes ? `\nNotes: ${intent.notes}` : '')
+  )
+}
+
+async function handleSupplierAdd(
+  tenantId: string,
+  schemaName: string,
+  intent: ParsedIntent
+): Promise<string> {
+  const name = intent.supplierName ?? intent.customerName
+  if (!name) {
+    return "What is the supplier's name?\nTry: 'add supplier Kampala Wholesale, phone 0772000000'"
+  }
+
+  try {
+    const supplier = await createSupplierRecord(tenantId, schemaName, {
+      name,
+      phone:    intent.customerPhone ?? null,
+      notes:    intent.notes ?? null,
+    })
+
+    return (
+      `\u2705 Supplier added\n` +
+      `Name: ${supplier.name}` +
+      (supplier.phone ? `\nPhone: ${supplier.phone}` : '') +
+      (supplier.location ? `\nLocation: ${supplier.location}` : '')
+    )
+  } catch (err) {
+    // Gracefully handle duplicate — createSupplierRecord throws 409
+    const isDuplicate =
+      err instanceof Error && err.message.includes('already exists')
+    if (isDuplicate) {
+      return `Supplier "${name}" is already in your records`
+    }
+    throw err
+  }
+}
+
+async function handleExpense(
+  tenantId: string,
+  schemaName: string,
+  intent: ParsedIntent
+): Promise<string> {
+  const name = intent.expenseName ?? intent.item
+  if (!name) {
+    return "What expense did you pay?\nTry: 'paid rent 500k' or 'electricity 150,000'"
+  }
+  if (!intent.totalPrice && !intent.unitPrice) {
+    return `How much was the ${name}? Try: 'paid ${name} 500k'`
+  }
+
+  const amount = intent.totalPrice ?? intent.unitPrice ?? 0
+
+  const { expense, isNew } = await recordExpense(tenantId, schemaName, {
+    name,
+    amountUgx: amount,
+    notes:     intent.notes ?? null,
+  })
+
+  const label = isNew ? 'Expense recorded' : 'Expense payment recorded'
+
+  return (
+    `\u2705 ${label}\n` +
+    `${expense.name}: ${formatUGX(expense.amountUgx)}\n` +
+    `Frequency: ${expense.frequency}` +
+    (intent.notes ? `\nNote: ${intent.notes}` : '')
+  )
+}
+
+async function handleMarketing(
+  tenantId: string,
+  schemaName: string,
+  recordedBy: string,
+  intent: ParsedIntent,
+  businessName: string
+): Promise<string> {
+  const prompt = intent.notes ?? intent.item
+  if (!prompt) {
+    return (
+      "What message do you want to send?\n" +
+      "Try: 'send customers: 20% off sugar this weekend only!'"
+    )
+  }
+
+  // Generate preview + get recipient count
+  const { message, recipientCount } = await previewBroadcast(
+    tenantId,
+    schemaName,
+    prompt,
+    businessName
+  )
+
+  if (recipientCount === 0) {
+    return (
+      "No opted-in customers to send to yet.\n" +
+      "Ask customers to save your number and send START to receive offers."
+    )
+  }
+
+  // Send immediately
+  await sendBroadcast(tenantId, schemaName, message, recordedBy)
+
+  const preview = message.length > 100 ? message.slice(0, 97) + '...' : message
+
+  return (
+    `\ud83d\udce2 Broadcast sent to ${recipientCount} customer${recipientCount === 1 ? '' : 's'}\n` +
+    `\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n` +
+    `"${preview}"`
+  )
+}
+
+async function handleReceipt(
+  tenantId: string,
+  schemaName: string,
+  intent: ParsedIntent
+): Promise<string> {
+  // Determine time window: default = today
+  const now = new Date()
+  let from: Date
+
+  if (intent.period === 'yesterday') {
+    from = new Date(now)
+    from.setDate(from.getDate() - 1)
+    from.setHours(0, 0, 0, 0)
+    now.setDate(now.getDate() - 1)
+    now.setHours(23, 59, 59, 999)
+  } else if (intent.period === 'week') {
+    from = new Date(now)
+    from.setDate(from.getDate() - 7)
+  } else if (intent.period === 'month') {
+    from = new Date(now)
+    from.setDate(1)
+    from.setHours(0, 0, 0, 0)
+  } else {
+    // today (default)
+    from = new Date(now)
+    from.setHours(0, 0, 0, 0)
+  }
+
+  const { sales, total } = await findSales(schemaName, tenantId, {
+    from,
+    to: new Date(),
+    perPage: 5,
+    page: 1,
+  })
+
+  if (sales.length === 0) {
+    const periodLabel = intent.period ?? 'today'
+    return `No sales recorded ${periodLabel}.`
+  }
+
+  const periodLabel = intent.period === 'week'
+    ? 'this week'
+    : intent.period === 'month'
+    ? 'this month'
+    : intent.period === 'yesterday'
+    ? 'yesterday'
+    : 'today'
+
+  const lines = sales.map(
+    (s) => `\u2022 ${s.itemName} \u00d7${s.qty} = ${formatUGX(s.totalPrice)}`
+  )
+
+  const grandTotal = sales.reduce((sum, s) => sum + s.totalPrice, 0)
+  const more = total > 5 ? `\n+${total - 5} more sales` : ''
+
+  return (
+    `\ud83e\udde7 Recent sales (${periodLabel})\n` +
+    `\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n` +
+    lines.join('\n') +
+    more +
+    `\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n` +
+    `Total: ${formatUGX(grandTotal)}`
   )
 }
