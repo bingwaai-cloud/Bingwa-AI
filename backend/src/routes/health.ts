@@ -20,12 +20,16 @@ healthRouter.get(
       timestamp: string
       version: string | undefined
       environment: string
+      railway: boolean
+      commit: string
     } = {
       server: 'ok',
       database: 'checking',
       timestamp: new Date().toISOString(),
       version: process.env['npm_package_version'],
       environment: process.env['NODE_ENV'] ?? 'development',
+      railway: Boolean(process.env['RAILWAY_PROJECT_ID']),
+      commit: process.env['RAILWAY_GIT_COMMIT_SHA']?.slice(0, 7) ?? 'local',
     }
 
     try {
