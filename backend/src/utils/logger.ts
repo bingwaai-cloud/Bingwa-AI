@@ -1,8 +1,13 @@
+import fs from 'fs'
+import path from 'path'
 import winston from 'winston'
 
 const { combine, timestamp, errors, json, colorize } = winston.format
 
-const isProduction = process.env['NODE_ENV'] === 'production'
+// Running in Railway if Railway injects its own env vars.
+// We also treat any non-development NODE_ENV as "container mode".
+const isRailway   = Boolean(process.env['RAILWAY_ENVIRONMENT'] ?? process.env['RAILWAY_PROJECT_ID'])
+const isContainer = isRailway || process.env['NODE_ENV'] === 'production'
 
 const developmentFormat = combine(
   colorize(),
@@ -21,32 +26,42 @@ const productionFormat = combine(
   json()
 )
 
-// In production (Railway), log only to Console.
-// Railway captures stdout/stderr and streams them in the dashboard.
-// File transports are omitted in production because:
-//  1. Container filesystems may be read-only or ephemeral
-//  2. Railway log streaming makes file logs redundant
-//  3. File writes were previously causing startup crashes
+// Console is always present — Railway / any container captures stdout/stderr.
 const transports: winston.transport[] = [
   new winston.transports.Console(),
 ]
 
-if (!isProduction) {
-  transports.push(
-    new winston.transports.File({
-      filename: 'logs/error.log',
-      level: 'error',
-      format: combine(timestamp(), errors({ stack: true }), json()),
-    }),
-    new winston.transports.File({
-      filename: 'logs/combined.log',
-      format: combine(timestamp(), json()),
-    })
-  )
+// File transports are only added when:
+//  1. NOT running in a container (Railway / production)
+//  2. The logs/ directory can actually be created
+// This prevents startup crashes in Railway where the FS may be read-only.
+if (!isContainer) {
+  try {
+    const logsDir = path.resolve('logs')
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true })
+    }
+    transports.push(
+      new winston.transports.File({
+        filename: path.join(logsDir, 'error.log'),
+        level: 'error',
+        format: combine(timestamp(), errors({ stack: true }), json()),
+      }),
+      new winston.transports.File({
+        filename: path.join(logsDir, 'combined.log'),
+        format: combine(timestamp(), json()),
+      })
+    )
+  } catch {
+    // If we can't create the logs directory, just continue with Console only.
+    // This should never happen in normal development but protects against
+    // permission errors in certain CI/CD or Docker environments.
+    console.warn('[logger] Could not create logs/ directory — file logging disabled')
+  }
 }
 
 export const logger = winston.createLogger({
   level: process.env['LOG_LEVEL'] ?? 'info',
-  format: isProduction ? productionFormat : developmentFormat,
+  format: isContainer ? productionFormat : developmentFormat,
   transports,
 })
