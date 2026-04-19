@@ -1,0 +1,15 @@
+{
+  "name": "bingwa-ai",
+  "version": "0.1.0",
+  "description": "Bingwa AI — WhatsApp-first ERP for East African SMBs",
+  "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "cd backend && npm install && npm run build",
+    "start": "cd backend && node dist/index.js",
+    "migrate:prod": "cd backend && npm run migrate:prod",
+    "dev": "cd backend && npm run dev"
+  }
+}
