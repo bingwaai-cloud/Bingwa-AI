@@ -25,6 +25,17 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 // ─── Scheduled jobs (morning/evening reports, subscription reminders) ─────────
 startScheduler()
 
+// ─── Database keepalive ───────────────────────────────────────────────────────
+// Railway's managed Postgres closes idle TCP connections after ~45 minutes
+// (visible as TCP_ABORT_ON_DATA in network logs).  A lightweight SELECT 1
+// every 3 minutes keeps the connection pool alive and avoids mid-query aborts.
+const DB_KEEPALIVE_MS = 3 * 60 * 1000 // 3 minutes
+setInterval(() => {
+  db.$queryRaw`SELECT 1`.catch((err) => {
+    logger.warn({ event: 'db_keepalive_failed', message: String(err) })
+  })
+}, DB_KEEPALIVE_MS)
+
 // ─── Graceful shutdown (Railway sends SIGTERM on redeploy) ────────────────────
 async function shutdown(signal: string): Promise<void> {
   logger.info({ event: 'shutdown_initiated', signal })
