@@ -78,6 +78,19 @@ export function createApp(): express.Express {
   // ─── Routes ───────────────────────────────────────────────────────────────
   app.use('/api', apiRouter)
 
+  // Root route — shown when someone opens the URL in a browser
+  app.get('/', (_req, res) => {
+    res.json({
+      name:        'Bingwa AI API',
+      tagline:     'The Champion of your business.',
+      status:      'live',
+      version:     process.env['npm_package_version'] ?? '0.1.0',
+      health:      '/api/health',
+      docs:        'https://github.com/bingwaai-cloud/Bingwa-AI',
+      environment: process.env['NODE_ENV'] ?? 'development',
+    })
+  })
+
   // 404 handler for unknown routes
   app.use((_req, res) => {
     res.status(404).json({
