@@ -6,6 +6,23 @@ import { asyncHandler } from '../middleware/asyncHandler.js'
 export const healthRouter = Router()
 
 /**
+ * GET /api/outbound-ip
+ * TEMPORARY — used once to find Railway's outbound IP for Airtel/MTN whitelisting.
+ * Remove this endpoint after getting the IP.
+ */
+healthRouter.get(
+  '/outbound-ip',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const response = await fetch('https://api.ipify.org?format=json')
+    const data = await response.json() as { ip: string }
+    res.json({
+      outboundIp: data.ip,
+      note: 'This is the IP Airtel/MTN will see when your server calls their API. Whitelist this. Remove endpoint after use.',
+    })
+  })
+)
+
+/**
  * GET /api/health
  * Public — no auth required.
  * Returns 200 when server + database are healthy, 503 when DB is down.
