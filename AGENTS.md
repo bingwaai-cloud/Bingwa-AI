@@ -36,8 +36,8 @@ the web dashboard follows fast as the full ERP surface.
 ## Tech stack
 - Backend: Node.js + Express + TypeScript (strict)
 - Database: PostgreSQL — **row-level multi-tenancy + Postgres RLS** (migrating off
-  schema-per-tenant; see .claude/rules/multi-tenant.md)
-- AI/NLP runtime: Claude API — claude-sonnet for parsing (model id in env, never hardcoded)
+  schema-per-tenant; see .Codex/rules/multi-tenant.md)
+- AI/NLP runtime: Codex API — Codex-sonnet for parsing (model id in env, never hardcoded)
 - WhatsApp: 360dialog (Cloud API-compatible payloads)
 - Payments: Flutterwave (behind PaymentProvider interface)
 - Auth: JWT + refresh tokens; 2FA for web owner accounts
@@ -48,8 +48,8 @@ the web dashboard follows fast as the full ERP surface.
 ## Project structure
 ```
 gezi-ai/  (folder currently named bingwa-ai)
-  CLAUDE.md
-  .claude/commands/  .claude/rules/
+  AGENTS.md
+  .Codex/commands/  .Codex/rules/
   backend/src/
     routes/ controllers/ services/ repositories/ middleware/
     nlp/          — intent parsing engine
@@ -111,16 +111,16 @@ gezi-ai/  (folder currently named bingwa-ai)
 - When any model makes a mistake, add a lesson below immediately.
 
 ## Rules (read before building any feature)
-- .claude/rules/security.md — auth, validation, rate limiting, secrets, audit
-- .claude/rules/multi-tenant.md — RLS row-level isolation + migration off schema-per-tenant
-- .claude/rules/nlp-parser.md — multi-item parsing, fuzzy matching, confidence
-- .claude/rules/uganda-specific.md — currency, phones, WhatsApp, receipts
-- .claude/rules/api-design.md — versioning, envelope, errors, pagination, drafts
-- .claude/rules/error-handling.md — global handler, logging, NLP/WhatsApp recovery
-- .claude/rules/testing.md — structure, patterns, NLP eval corpus
-- .claude/rules/scalability.md — stateless API, caching, multi-country, flags
-- .claude/rules/deployment.md — Railway, health, migrations, backups, monitoring
-- .claude/rules/web-design.md — design tokens, UX, POS screen, perf budgets (binding for all web work)
+- .Codex/rules/security.md — auth, validation, rate limiting, secrets, audit
+- .Codex/rules/multi-tenant.md — RLS row-level isolation + migration off schema-per-tenant
+- .Codex/rules/nlp-parser.md — multi-item parsing, fuzzy matching, confidence
+- .Codex/rules/uganda-specific.md — currency, phones, WhatsApp, receipts
+- .Codex/rules/api-design.md — versioning, envelope, errors, pagination, drafts
+- .Codex/rules/error-handling.md — global handler, logging, NLP/WhatsApp recovery
+- .Codex/rules/testing.md — structure, patterns, NLP eval corpus
+- .Codex/rules/scalability.md — stateless API, caching, multi-country, flags
+- .Codex/rules/deployment.md — Railway, health, migrations, backups, monitoring
+- .Codex/rules/web-design.md — design tokens, UX, POS screen, perf budgets (binding for all web work)
 
 ## Commands
 - npm run dev | npm run test | npm run migrate | npm run typecheck | npm run lint
@@ -131,3 +131,5 @@ gezi-ai/  (folder currently named bingwa-ai)
 - Substring item matching silently records wrong items — fuzzy + alias table only
 - Single-item ParsedIntent couldn't handle real messages ("sold 2 sugar 3 soap") — items[] always
 - Never let audit logging be fire-and-forget on financial writes — same transaction
+
+## Imported Claude Cowork project instructions

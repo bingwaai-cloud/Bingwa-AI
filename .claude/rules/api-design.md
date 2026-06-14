@@ -118,14 +118,16 @@ interface PaginationParams {
 // Duplicate request with same key returns cached response
 // Prevents double-charging on network retry
 ```
+POS offline sync uses the same Idempotency-Key mechanism: every queued sale
+carries a client-generated UUID key; replays return the cached response.
 
 ## WhatsApp-specific response format
-When source is WhatsApp, responses are plain text messages, not JSON.
-The controller layer transforms API response → WhatsApp message format.
+The channel adapter calls the same /api/v1 endpoints as web. It owns ONLY
+message formatting and chat session bookkeeping — zero business logic.
 
 ```typescript
 // Controller detects source
-const source = req.headers['x-bingwa-source'] || 'api'
+const source = req.headers['x-gezi-source'] || 'api'
 if (source === 'whatsapp') {
   return res.json({ message: formatWhatsAppMessage(result) })
 }
@@ -137,6 +139,13 @@ return res.json({ success: true, data: result })
 - Keep v1 endpoints alive for 6 months after v2 launch
 - Return Deprecation header on old endpoints
 - Never remove an endpoint without a migration path
+
+### Draft transactions (conversation state — system of record for multi-turn flows)
+GET  /api/v1/drafts          — list open drafts (web shows 'awaiting confirmation')
+POST /api/v1/drafts          — create (NLP output lands here when not auto-committed)
+POST /api/v1/drafts/:id/confirm | /amend | /cancel
+States: parsed → pending_clarification → confirmed → committed (immutable after).
+WhatsApp clarification flows and web both operate on the SAME drafts.
 
 ## Internal endpoints (not public)
 Prefix with /internal/ — protected by internal API key, not JWT

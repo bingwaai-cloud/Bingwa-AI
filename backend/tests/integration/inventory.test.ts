@@ -400,7 +400,7 @@ describe('Inventory API', () => {
 
     it('returns WhatsApp text format when x-gezi-source header is set', async () => {
       const res = await request(app)
-        .post(`/api/v1/inventory/${itemId}/adjust`)
+        .post(`/api/v1/inventory/${TEST_ITEM_ID}/adjust`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-gezi-source', 'whatsapp')
         .send({ adjustment: 5, reason: 'stock_count' })

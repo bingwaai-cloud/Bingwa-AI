@@ -50,7 +50,7 @@ export const handleCreatePurchase = asyncHandler(async (req: Request, res: Respo
     supplierName: parsed.data.supplierName,
     notes: parsed.data.notes,
     source: parsed.data.source,
-    recordedBy: undefined, // userId is UUID (36 chars); recorded_by is VARCHAR(20) — use source field instead
+    actorUserId: req.user?.userId,
   })
 
   res.status(201).json({

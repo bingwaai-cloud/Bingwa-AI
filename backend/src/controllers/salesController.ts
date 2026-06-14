@@ -90,7 +90,7 @@ export const handleCreateSale = asyncHandler(async (req: Request, res: Response)
     customerName: parsed.data.customerName,
     notes: parsed.data.notes,
     source: parsed.data.source,
-    recordedBy: undefined, // userId is UUID (36 chars); recorded_by is VARCHAR(20) — use source field instead
+    actorUserId: req.user?.userId,
   })
 
   // WhatsApp callers get a plain-text message; all other clients get JSON.
@@ -164,7 +164,7 @@ export const handleCancelSale = asyncHandler(async (req: Request, res: Response)
 
   if (!id) throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Sale ID required', 400)
 
-  const sale = await cancelSale(tenantId, id)
+  const sale = await cancelSale(tenantId, id, undefined, req.user?.userId)
 
   res.json({ success: true, data: sale })
 })

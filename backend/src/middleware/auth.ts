@@ -5,7 +5,6 @@ import { AppError, ErrorCodes } from '../utils/AppError.js'
 export interface JwtPayload {
   userId: string
   tenantId: string
-  schemaName: string
   role: 'owner' | 'manager' | 'cashier'
 }
 
@@ -16,7 +15,6 @@ declare global {
     interface Request {
       user?: JwtPayload
       tenantId?: string
-      schemaName?: string
       rawBody?: Buffer // stashed by app.ts verify callback for webhook HMAC check
     }
   }
@@ -24,7 +22,7 @@ declare global {
 
 /**
  * Verifies the JWT access token from the Authorization header.
- * On success, attaches req.user, req.tenantId, and req.schemaName.
+ * On success, attaches req.user and req.tenantId.
  */
 export function authenticate(req: Request, res: Response, next: NextFunction): void {
   const header = req.headers['authorization']
@@ -51,7 +49,6 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
     }
     req.user = payload
     req.tenantId = payload.tenantId
-    req.schemaName = payload.schemaName
     next()
   } catch (err) {
     if (err instanceof jwt.TokenExpiredError) {

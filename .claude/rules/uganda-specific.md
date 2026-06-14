@@ -5,6 +5,11 @@
 - Never use parseFloat() on money values
 - Display format: "UGX 70,000" or "70k" in WhatsApp messages
 - Input normalization: see nlp-parser.md
+- 70/= and 70/- → 70 (East African shilling notation)
+- '2 @ 6k', '2 at 6k' → qty 2, unit price 6000
+- 'buli emu'/'@kimu'/'each' marks unit price
+- 6,5k → 6500 (comma as decimal in shorthand)
+- Units: bag, doz, jerrycan, crate, tray, sack, carton
 
 ## Phone numbers
 ```typescript
@@ -26,6 +31,9 @@ export function isAirtel(phone: string): boolean {
   return /^\+256(75|70)/.test(normalized)
 }
 ```
+- One phone may map to MULTIPLE businesses (tenant_users join table).
+- 'switch <business>' command changes active context; confirm current
+  business name in replies when user has >1.
 
 ## WhatsApp message formatting
 - Max 300 characters for conversational replies
@@ -44,7 +52,7 @@ export function formatReceipt(sale: Sale, business: Business): string {
   
   return [
     '================================',
-    '         BINGWA AI              ',
+    '         GEZI AI                ',
     business.name.padStart(16 + business.name.length / 2).slice(0, 32),
     `Tel: ${business.phone}`,
     '================================',
@@ -54,7 +62,7 @@ export function formatReceipt(sale: Sale, business: Business): string {
     '--------------------------------',
     line('TOTAL', formatUGX(sale.totalPrice)),
     '================================',
-    '   Powered by Bingwa AI   ',
+    '   Powered by Gezi AI     ',
     '================================'
   ].join('\n')
 }
@@ -75,6 +83,11 @@ Support mixed messages:
 
 Always pass raw message to Claude — let NLP handle language.
 Do not attempt language detection before Claude call.
+
+## Document types (never conflate)
+One sale can produce: (a) internal receipt — thermal/WhatsApp text;
+(b) fiscal invoice — URA EFRIS, has fiscal doc number + QR, async;
+(c) statement/quote. Separate templates, separate tables, one sale row.
 
 ## Common item aliases (seed these at onboarding)
 ```

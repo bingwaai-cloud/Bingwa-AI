@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
 import { AppError, ErrorCodes } from '../utils/AppError.js'
 import { logger } from '../utils/logger.js'
-import { maskPhone, normalizePhone, schemaNameFromTenantId } from '../utils/phone.js'
+import { maskPhone, normalizePhone } from '../utils/phone.js'
 import { withTenant } from '../db.js'
 import * as tenantRepo from '../repositories/tenantRepository.js'
 import * as userRepo from '../repositories/userRepository.js'
@@ -49,15 +49,14 @@ export type SignupInput = {
 export type AuthResult = {
   accessToken: string
   refreshToken: string
-  tenant: { id: string; businessName: string; schemaName: string; ownerPhone: string }
+  tenant: { id: string; businessName: string; ownerPhone: string }
   user: { id: string; phone: string; name: string | null; role: string }
 }
 
 /**
  * Signup -- row-level tenancy: creating a tenant is now just an INSERT into
  * public.tenants (no per-tenant schema DDL). The owner user is written through
- * withTenant() so RLS context is set. schema_name is still stored on the tenant
- * row (legacy NOT NULL column) but no schema is created.
+ * withTenant() so RLS context is set.
  */
 export async function signup(input: SignupInput): Promise<AuthResult> {
   const phone = normalizePhone(input.ownerPhone)
@@ -68,7 +67,6 @@ export async function signup(input: SignupInput): Promise<AuthResult> {
   }
 
   const tenantId = randomUUID()
-  const schemaName = schemaNameFromTenantId(tenantId)
   const passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS)
 
   let tenant
@@ -78,7 +76,6 @@ export async function signup(input: SignupInput): Promise<AuthResult> {
       businessName: input.businessName,
       ownerName: input.ownerName,
       ownerPhone: phone,
-      schemaName,
       businessType: input.businessType,
     })
   } catch (err) {
@@ -108,7 +105,7 @@ export async function signup(input: SignupInput): Promise<AuthResult> {
 
   await tenantRepo.createFreeSubscription(tenant.id)
 
-  const jwtPayload: JwtPayload = { userId: user.id, tenantId: tenant.id, schemaName, role: 'owner' }
+  const jwtPayload: JwtPayload = { userId: user.id, tenantId: tenant.id, role: 'owner' }
   const { accessToken, refreshToken } = buildTokens(jwtPayload)
 
   await withTenant(tenant.id, (tx) =>
@@ -120,7 +117,7 @@ export async function signup(input: SignupInput): Promise<AuthResult> {
   return {
     accessToken,
     refreshToken,
-    tenant: { id: tenant.id, businessName: tenant.businessName, schemaName, ownerPhone: tenant.ownerPhone },
+    tenant: { id: tenant.id, businessName: tenant.businessName, ownerPhone: tenant.ownerPhone },
     user: { id: user.id, phone: user.phone, name: user.name, role: user.role },
   }
 }
@@ -138,7 +135,7 @@ export async function login(phone: string, password: string): Promise<AuthResult
   const valid = await bcrypt.compare(password, user.passwordHash)
   if (!valid) throw new AppError(ErrorCodes.UNAUTHORIZED, 'Invalid phone number or password.', 401)
 
-  const jwtPayload: JwtPayload = { userId: user.id, tenantId: tenant.id, schemaName: tenant.schemaName, role: user.role }
+  const jwtPayload: JwtPayload = { userId: user.id, tenantId: tenant.id, role: user.role }
   const { accessToken, refreshToken } = buildTokens(jwtPayload)
 
   await withTenant(tenant.id, async (tx) => {
@@ -151,7 +148,7 @@ export async function login(phone: string, password: string): Promise<AuthResult
   return {
     accessToken,
     refreshToken,
-    tenant: { id: tenant.id, businessName: tenant.businessName, schemaName: tenant.schemaName, ownerPhone: tenant.ownerPhone },
+    tenant: { id: tenant.id, businessName: tenant.businessName, ownerPhone: tenant.ownerPhone },
     user: { id: user.id, phone: user.phone, name: user.name, role: user.role },
   }
 }
@@ -180,7 +177,7 @@ export async function refreshTokens(incomingToken: string): Promise<RefreshResul
     const user = await userRepo.findUserByRefreshTokenHash(tx, tenant.id, tokenHash)
     if (!user) throw new AppError(ErrorCodes.UNAUTHORIZED, 'Refresh token revoked or expired.', 401)
 
-    const jwtPayload: JwtPayload = { userId: user.id, tenantId: tenant.id, schemaName: tenant.schemaName, role: user.role }
+    const jwtPayload: JwtPayload = { userId: user.id, tenantId: tenant.id, role: user.role }
     const tokens = buildTokens(jwtPayload)
     await userRepo.setRefreshToken(tx, tenant.id, user.id, hashToken(tokens.refreshToken), new Date(Date.now() + REFRESH_TOKEN_TTL_MS))
     return tokens

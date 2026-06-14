@@ -16,10 +16,12 @@ export function createApp(): express.Express {
   )
 
   // ─── CORS ─────────────────────────────────────────────────────────────────
+  const configuredOrigins = process.env['WEB_ORIGINS']
+    ?.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
   const allowedOrigins = [
-    // CORS domains pending DNS rename (bingwa → gezi)
-    'https://bingwa.ai',
-    'https://app.bingwa.ai',
+    ...(configuredOrigins?.length ? configuredOrigins : ['https://gezi.ai', 'https://app.gezi.ai']),
     process.env['NODE_ENV'] !== 'production' ? 'http://localhost:3000' : '',
     process.env['NODE_ENV'] !== 'production' ? 'http://localhost:5173' : '',
   ].filter(Boolean) as string[]
@@ -87,7 +89,7 @@ export function createApp(): express.Express {
       status:      'live',
       version:     process.env['npm_package_version'] ?? '0.1.0',
       health:      '/api/health',
-      docs:        'https://github.com/bingwaai-cloud/Bingwa-AI',
+      docs:        process.env['REPO_URL'] || 'https://github.com/gezi-ai/gezi-ai',
       environment: process.env['NODE_ENV'] ?? 'development',
     })
   })

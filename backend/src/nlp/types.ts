@@ -61,7 +61,6 @@ export interface Interaction {
 
 export interface UserContext {
   tenantId: string
-  schemaName: string
   userPhone: string
   tenant: {
     businessName: string

@@ -7,12 +7,11 @@ import type { Tenant } from '@prisma/client'
  */
 
 export type CreateTenantInput = {
-  id: string          // caller generates UUID so schema name can be derived before insert
+  id: string
   businessName: string
   businessType?: string
   ownerName: string
   ownerPhone: string
-  schemaName: string
   country?: string
   currency?: string
   timezone?: string
@@ -26,7 +25,7 @@ export async function createTenant(data: CreateTenantInput): Promise<Tenant> {
       businessType: data.businessType ?? null,
       ownerName: data.ownerName,
       ownerPhone: data.ownerPhone,
-      schemaName: data.schemaName,
+      schemaName: `tenant_${data.id.replace(/-/g, '_')}`,
       country: data.country ?? 'UG',
       currency: data.currency ?? 'UGX',
       timezone: data.timezone ?? 'Africa/Kampala',

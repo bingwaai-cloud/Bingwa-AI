@@ -1,7 +1,7 @@
 # Rule: Security Hardening — Non-Negotiable
 
 ## Philosophy
-Bingwa AI holds real financial data for real businesses.
+Gezi AI holds real financial data for real businesses.
 A breach = destroyed trust = destroyed company.
 Every feature must be built with security as a first-class concern, not an afterthought.
 
@@ -18,11 +18,11 @@ Every feature must be built with security as a first-class concern, not an after
 const accessToken = jwt.sign(
   { userId, tenantId, role },
   process.env.JWT_SECRET!,
-  { expiresIn: '15m', issuer: 'bingwa-ai' }
+  { expiresIn: '15m', issuer: 'gezi-ai' }
 )
 
 // Always verify issuer on decode
-const decoded = jwt.verify(token, secret, { issuer: 'bingwa-ai' })
+const decoded = jwt.verify(token, secret, { issuer: 'gezi-ai' })
 ```
 
 ### Role-based access control
@@ -37,6 +37,10 @@ const permissions = {
 
 // Enforce in middleware — never in individual routes
 ```
+
+### Web 2FA
+Owner accounts on the web dashboard require TOTP 2FA (SIM-swap is common in
+the market). Cashier/manager web logins: 2FA optional, owner-configurable.
 
 ### WhatsApp identity
 - Phone number from Meta webhook is trusted (Meta verifies it)
@@ -67,6 +71,9 @@ if (!validated.success) {
 ## 3. SQL Injection prevention
 - ONLY use Prisma parameterized queries — never string concatenation
 - Raw SQL only in migrations, never in application code
+- `$executeRawUnsafe` is BANNED in application code, including for schema/
+  identifier names. Tenant context is set via parameterized
+  `SELECT set_config('app.tenant_id', $1, true)` inside a transaction.
 - If raw SQL is absolutely necessary: use `db.$queryRaw` with tagged template literals ONLY
 
 ```typescript
@@ -119,6 +126,9 @@ export const whatsappRateLimit = rateLimit({
   keyGenerator: (req) => req.body?.from || req.ip,
   message: { error: 'Too many messages, slow down' }
 })
+
+// Note: express-rate-limit's in-memory store breaks with >1 instance.
+// Acceptable now; move to a Redis store when horizontal scaling begins (tracked P2).
 ```
 
 ## 6. Secrets Management
@@ -159,6 +169,9 @@ const maskPhone = (phone: string) => phone.slice(0, 6) + '****' + phone.slice(-2
 // - Soft delete all financial records (keep for tax compliance)
 // - Hard delete: customer phones, names, personal data
 // - Anonymize audit log entries
+// - Uganda Data Protection and Privacy Act 2019: register with the PDPO;
+//   document the cross-border transfer basis (data hosted on Railway US/EU).
+//   Required before enterprise sales due-diligence.
 ```
 
 ## 8. MTN MoMo Security
@@ -218,7 +231,10 @@ async function auditLog(params: {
   source: 'whatsapp' | 'web' | 'mobile' | 'system'
 }) {
   await db.auditLog.create({ data: params })
-  // Never throw if audit log fails — log error but continue
+  // For FINANCIAL writes (sales, purchases, payments, deletions): the audit
+  //  entry is written in the SAME database transaction as the write — they
+  //  succeed or fail together. Fire-and-forget audit is only acceptable for
+  //  non-financial events (logins, report views).
 }
 ```
 

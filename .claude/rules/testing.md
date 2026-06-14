@@ -45,8 +45,10 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  // Clean up test tenant schema
-  await db.$executeRaw`DROP SCHEMA IF EXISTS tenant_${testTenantId} CASCADE`
+  // Clean up test data by tenant_id
+  await db.sale.deleteMany({ where: { tenantId: testTenantId } })
+  await db.purchase.deleteMany({ where: { tenantId: testTenantId } })
+  await db.item.deleteMany({ where: { tenantId: testTenantId } })
   await db.tenant.delete({ where: { id: testTenantId } })
   await db.$disconnect()
 })
@@ -156,33 +158,40 @@ describe('parseIntent', () => {
   const mockContext = buildMockContext({
     items: [
       { name: 'Sugar', nameNormalized: 'sugar', typicalSellPrice: 6500 },
-      { name: 'Gumboots', nameNormalized: 'gumboots', typicalSellPrice: 35000 }
+      { name: 'Soap', nameNormalized: 'soap', typicalSellPrice: 2500 }
     ]
   })
 
-  it('parses clear sale message', async () => {
-    const result = await parseIntent('sold 2 gumboots at 70k total', mockContext)
+  // Multi-item messages are CORE cases:
+  it('parses multi-item sale: "sold 2 sugar 6k, 3 soap 2500"', async () => {
+    const result = await parseIntent('sold 2 sugar 6k, 3 soap 2500', mockContext)
     expect(result.action).toBe('sale')
-    expect(result.item).toBe('gumboots')
-    expect(result.qty).toBe(2)
-    expect(result.totalPrice).toBe(70000)
-    expect(result.unitPrice).toBe(35000)
+    expect(result.items).toHaveLength(2)
+    expect(result.items[0].item).toBe('sugar')
+    expect(result.items[0].qty).toBe(2)
+    expect(result.items[0].unitPrice).toBe(6000)
+    expect(result.items[1].item).toBe('soap')
+    expect(result.items[1].qty).toBe(3)
+    expect(result.items[1].unitPrice).toBe(2500)
     expect(result.confidence).toBeGreaterThan(0.85)
-    expect(result.needsClarification).toBe(false)
+  })
+
+  it('parses Swahili multi-item: "nimeuza sukari 2 na sabuni 3 @ 2500"', async () => {
+    const result = await parseIntent('nimeuza sukari 2 na sabuni 3 @ 2500', mockContext)
+    expect(result.items).toHaveLength(2)
   })
 
   it('flags ambiguous price and asks clarification', async () => {
-    // No price history for this item
     const contextNoHistory = buildMockContext({ items: [] })
     const result = await parseIntent('sold 5 soap 3000', contextNoHistory)
-    expect(result.needsClarification).toBe(true)
+    expect(result.resolution).toBe('clarify')
     expect(result.clarificationQuestion).toBeTruthy()
   })
 
   it('detects anomalous price', async () => {
-    // Sugar normally sells at 6500 — 2000 is anomalous (< 40% of typical)
+    // Sugar normally sells at 6500 — 2000 is anomalous
     const result = await parseIntent('sold 1 sugar at 2000', mockContext)
-    expect(result.anomaly).toBe(true)
+    expect(result.items[0].anomaly).toBe(true)
   })
 })
 ```
@@ -201,6 +210,10 @@ it('rejects requests with invalid Meta signature', async () => {
 })
 ```
 
+## NLP regression corpus
+backend/tests/nlp/corpus/ holds real anonymized pilot messages (target 200+),
+tagged by category. CI runs the full corpus; pass-rate regression blocks merge.
+
 ## Minimum test coverage requirements
 - NLP parser: 100% of test cases in nlp-spec.md
 - Currency normalization: 100%
@@ -209,6 +222,9 @@ it('rejects requests with invalid Meta signature', async () => {
 - Auth middleware: authenticated + unauthenticated + wrong tenant
 - Webhook: valid signature + invalid signature + rate limit
 - Payment flow: success + failure + timeout + duplicate
+- Cross-tenant isolation: API + repository denial tests for every module
+- Drafts state machine: every transition + illegal transition rejection
+- Idempotency: duplicate Idempotency-Key returns cached response, no double-write
 
 ## Running tests
 ```bash

@@ -13,6 +13,7 @@ import type { PrismaClient as PrismaTx } from '@prisma/client'
 export interface AuditLogEntry {
   tenantId: string
   userPhone?: string | null
+  actorUserId?: string | null
   action: string
   entityType?: string | null
   entityId?: string | null
@@ -29,6 +30,7 @@ export async function insertAuditLog(
     data: {
       tenantId: entry.tenantId,
       userPhone: entry.userPhone ?? null,
+      actorUserId: entry.actorUserId ?? null,
       action: entry.action,
       entityType: entry.entityType ?? null,
       entityId: entry.entityId ?? null,

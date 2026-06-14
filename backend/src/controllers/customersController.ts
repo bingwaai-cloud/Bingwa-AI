@@ -119,7 +119,7 @@ export const handleUpdateCustomer = asyncHandler(async (req: Request, res: Respo
 
   const updated = await editCustomer(tenantId, id, {
     ...parsed.data,
-    updatedBy: req.user?.userId,
+    actorUserId: req.user?.userId,
   })
 
   res.json({ success: true, data: updated })

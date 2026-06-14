@@ -54,7 +54,6 @@ interface MockContextOptions {
 export function buildMockContext(options: MockContextOptions = {}): UserContext {
   return {
     tenantId: 'tenant-test-001',
-    schemaName: 'tenant_test_001',
     userPhone: '+256772000001',
     tenant: {
       businessName: 'Rose General Store',

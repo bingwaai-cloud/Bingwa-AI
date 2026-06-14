@@ -44,7 +44,7 @@ export async function handleIncomingMessage(
   if (!tenant) {
     await sendTextMessage(
       phone,
-      "Hi! I'm Gezi AI 🏆\nTo get started, sign up at bingwa.ai or ask your shop owner to add you as a user."
+      "Hi! I'm Gezi AI 🏆\nTo get started, sign up at gezi.ai or ask your shop owner to add you as a user."
     )
     logger.info({ event: 'whatsapp_unknown_sender', phone: maskPhone(phone) })
     return
@@ -69,7 +69,6 @@ export async function handleIncomingMessage(
   // 4. Build NLP context + parse intent
   const userContext: UserContext = {
     tenantId: tenant.id,
-    schemaName: tenant.schemaName,
     userPhone: phone,
     tenant: {
       businessName: tenant.businessName,

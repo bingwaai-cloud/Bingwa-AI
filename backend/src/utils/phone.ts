@@ -41,8 +41,3 @@ export function maskPhone(phone: string): string {
   if (n.length < 8) return '****'
   return n.slice(0, 6) + '****' + n.slice(-2)
 }
-
-/** Derive a PostgreSQL schema name from a tenant UUID */
-export function schemaNameFromTenantId(tenantId: string): string {
-  return `tenant_${tenantId.replace(/-/g, '_')}`
-}

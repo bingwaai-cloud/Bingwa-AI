@@ -28,6 +28,7 @@ export interface CreatePurchaseParams {
   supplierId?: string | null
   supplierName?: string
   recordedBy?: string
+  actorUserId?: string
   source?: string
   notes?: string
 }
@@ -96,6 +97,7 @@ export async function createPurchaseRecord(
 
     await insertAuditLog(tx, {
       tenantId,
+      actorUserId: params.actorUserId ?? null,
       action: 'purchase.created',
       entityType: 'purchase',
       entityId: purchase.id,

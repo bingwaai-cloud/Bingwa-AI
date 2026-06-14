@@ -97,6 +97,18 @@ describe('Sales API', () => {
       expect(logs[0]?.action).toBe('sale.created')
     })
 
+    it('persists actorUserId on a web-origin sale', async () => {
+      await request(app)
+        .post('/api/v1/sales')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ itemId: TEST_ITEM_ID, itemName: 'Sugar', qty: 1, unitPrice: 6500, totalPrice: 6500, source: 'web' })
+
+      const logs = await withTenant(TEST_TENANT_ID, (tx) =>
+        tx.auditLog.findMany({ where: { action: 'sale.created' }, orderBy: { createdAt: 'desc' }, take: 1 })
+      )
+      expect(logs[0]?.actorUserId).toBe('00000000-0000-0000-0000-0000000000aa')
+    })
+
     it('rejects a sale when stock is insufficient -- 422 INSUFFICIENT_STOCK', async () => {
       const res = await request(app)
         .post('/api/v1/sales')

@@ -5,3 +5,7 @@ dist/
 .DS_Store
 coverage/
 prisma/migrations/dev.db
+
+# FUSE mount artifacts (cannot be unlinked on this filesystem)
+.fuse_hidden*
+**/.fuse_hidden*

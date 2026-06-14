@@ -130,16 +130,14 @@ async function sendNonTextReply(from: string, messageId: string): Promise<void> 
 async function handleStopRequest(fromPhone: string): Promise<void> {
   const { sendTextMessage } = await import('./whatsappClient.js')
   const { normalizePhone } = await import('../utils/phone.js')
-  const { withTenant } = await import('../db.js')
   const { findTenantByOwnerPhone } = await import('../repositories/tenantRepository.js')
-  const { optOutMarketing } = await import('../repositories/customersRepository.js')
+  const { setMarketingOptIn } = await import('../services/marketingService.js')
 
   const phone = normalizePhone(fromPhone)
   const tenant = await findTenantByOwnerPhone(phone)
 
   if (tenant) {
-    await withTenant(tenant.id, (tx) => optOutMarketing(tx, tenant.id, phone))
-    logger.info({ event: 'marketing_opt_out', phone: phone.slice(0, 6) + '****' })
+    await setMarketingOptIn(tenant.id, phone, false)
   }
 
   await sendTextMessage(
@@ -155,16 +153,14 @@ async function handleStopRequest(fromPhone: string): Promise<void> {
 async function handleStartRequest(fromPhone: string): Promise<void> {
   const { sendTextMessage } = await import('./whatsappClient.js')
   const { normalizePhone } = await import('../utils/phone.js')
-  const { withTenant } = await import('../db.js')
   const { findTenantByOwnerPhone } = await import('../repositories/tenantRepository.js')
-  const { optInMarketing } = await import('../repositories/customersRepository.js')
+  const { setMarketingOptIn } = await import('../services/marketingService.js')
 
   const phone = normalizePhone(fromPhone)
   const tenant = await findTenantByOwnerPhone(phone)
 
   if (tenant) {
-    await withTenant(tenant.id, (tx) => optInMarketing(tx, tenant.id, phone))
-    logger.info({ event: 'marketing_opt_in', phone: phone.slice(0, 6) + '****' })
+    await setMarketingOptIn(tenant.id, phone, true)
   }
 
   await sendTextMessage(

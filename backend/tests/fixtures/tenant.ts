@@ -14,7 +14,6 @@ export const asTenant = withTenant
 
 export interface TestTenant {
   tenantId: string
-  schemaName: string
   ownerPhone: string
 }
 
@@ -38,7 +37,7 @@ export async function createTestTenant(t: {
       currency: 'UGX',
     },
   })
-  return { tenantId: t.id, schemaName, ownerPhone: t.ownerPhone }
+  return { tenantId: t.id, ownerPhone: t.ownerPhone }
 }
 
 export function makeToken(
@@ -49,7 +48,6 @@ export function makeToken(
     {
       userId: opts.userId ?? '00000000-0000-0000-0000-0000000000aa',
       tenantId: t.tenantId,
-      schemaName: t.schemaName,
       role: opts.role ?? 'owner',
     },
     process.env['JWT_SECRET']!,

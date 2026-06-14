@@ -8,9 +8,9 @@ teaches you more in one day than a month of local development.
 
 ```
 Railway.app
-  ├── bingwa-api (Node.js service)
-  ├── bingwa-db (PostgreSQL managed)
-  └── bingwa-worker (scheduled jobs — same code, different start command)
+  ├── gezi-api (Node.js service)
+├── gezi-db (PostgreSQL managed)
+├── gezi-worker (scheduled jobs — same code, different start command)
 
 Cost: ~$20–30/month
 Handles: up to 500 active tenants comfortably
@@ -117,13 +117,15 @@ app.use((req, res, next) => {
 ```
 
 ## Backup strategy
-```
-PostgreSQL: Railway auto-backup daily (7 days retention)
-Phase 2: Add weekly export to Google Cloud Storage
-Critical: Financial data must be recoverable to within 24 hours
-```
+PostgreSQL: Railway auto-backup daily (7-day retention) PLUS weekly
+encrypted export to external object storage (GCS/S3) retained ≥ 7 years
+(tax-grade financial data). A restore is TESTED quarterly — an untested
+backup is not a backup. RPO 24h, RTO 4h.
 
 ## WhatsApp webhook URL setup
+Production webhook serves 360dialog (Cloud API-compatible payloads).
+Keep signature verification provider-agnostic behind channels/.
+
 ```
 Production: https://api.bingwa.ai/webhook
 Development: Use ngrok for local testing
@@ -149,6 +151,9 @@ All features go through develop branch first.
 - [ ] Database migration tested on develop first
 - [ ] /api/health returns 200 after deploy
 - [ ] One real WhatsApp message tested end-to-end
+- [ ] Cross-tenant denial tests green (RLS)
+- [ ] Payment reconciliation job ran clean in last 24h
+- [ ] No new $executeRawUnsafe (CI grep)
 
 ## Rollback plan
 Railway keeps previous deploy available.

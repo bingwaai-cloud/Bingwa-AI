@@ -1,7 +1,7 @@
 # Rule: Scalability & Big Picture
 
 ## The vision we are building toward
-Bingwa AI starts as a Uganda WhatsApp ERP.
+Gezi AI starts as a Uganda WhatsApp ERP.
 It ends as the operating system for every SMB in Africa.
 Every architectural decision must support that journey.
 
@@ -72,6 +72,8 @@ interface TenantConfig {
 
 New country = add payment provider + currency + language aliases.
 Core logic never changes.
+PaymentProvider interface per country config: UG = Flutterwave (MoMo+Airtel),
+KE = M-Pesa via aggregator, etc. Adding a country must not touch core logic.
 
 ## Platform network — the big picture feature
 
@@ -118,9 +120,10 @@ Transactional DB (writes) → Sync → Analytics DB (reads)
 ```
 
 ### Tenant data growth
-Each tenant schema grows independently.
-When a tenant reaches 1M transactions, they get dedicated resources.
-This is why schema-per-tenant beats row-level tenancy at scale.
+Row-level + RLS to ~5k tenants comfortably (partition hot tables by
+tenant_id hash if needed). Very large tenants get PROMOTED to a dedicated
+database (same schema, own instance) — promotion tooling is a Phase 4
+concern. We do NOT run schema-per-tenant.
 
 ## API versioning for the future
 ```
@@ -142,7 +145,7 @@ The API will eventually power:
 This is why API-first matters so much.
 Every feature built as API = every future integration is free.
 
-## The moat — what protects Bingwa at scale
+## The moat — what protects Gezi at scale
 1. **Data moat**: 2 years of a shop's price history, customers, suppliers
 2. **Network moat**: suppliers and buyers connected through the platform
 3. **Habit moat**: WhatsApp is muscle memory for shop owners
@@ -157,6 +160,13 @@ NLP parsing: < 2 seconds (p99)
 Uptime target: 99.5% (allows 3.6 hours downtime/month)
 Concurrent tenants: 10,000 (Phase 3 target)
 ```
+
+## Shared WhatsApp number (360dialog) — platform risk controls
+- Quality rating is monitored as a first-class metric with alerting
+- Marketing broadcasts: approved templates only, per-tenant rate caps,
+  instant opt-out honored platform-wide
+- Warm second number + rehearsed migration runbook BEFORE 1k tenants
+- 24h customer-service window tracked per end-user phone
 
 ## When to scale (don't over-engineer early)
 ```

@@ -33,6 +33,7 @@ export interface CreateSaleParams {
   customerPhone?: string
   customerName?: string
   recordedBy?: string
+  actorUserId?: string
   source?: string
   notes?: string
 }
@@ -136,6 +137,7 @@ export async function createSaleRecord(
 
     await insertAuditLog(tx, {
       tenantId,
+      actorUserId: params.actorUserId ?? null,
       action: 'sale.created',
       entityType: 'sale',
       entityId: sale.id,
@@ -181,7 +183,8 @@ export async function getTodaySummary(
 export async function cancelSale(
   tenantId: string,
   saleId: string,
-  recordedBy?: string
+  recordedBy?: string,
+  actorUserId?: string
 ): Promise<Sale> {
   return withTenant(tenantId, async (tx) => {
     const existing = await findSaleById(tx, tenantId, saleId)
@@ -202,6 +205,7 @@ export async function cancelSale(
     await insertAuditLog(tx, {
       tenantId,
       userPhone: recordedBy ?? null,
+      actorUserId: actorUserId ?? null,
       action: 'sale.cancelled',
       entityType: 'sale',
       entityId: saleId,

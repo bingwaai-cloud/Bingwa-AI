@@ -3,7 +3,11 @@ import { AppError, ErrorCodes } from '../utils/AppError.js'
 import { logger } from '../utils/logger.js'
 import { withTenant } from '../db.js'
 import { sendTextMessage } from '../whatsapp/whatsappClient.js'
-import { findOptedInPhones } from '../repositories/customersRepository.js'
+import {
+  findOptedInPhones,
+  optInMarketing,
+  optOutMarketing,
+} from '../repositories/customersRepository.js'
 import {
   createBroadcast,
   countTodayBroadcasts,
@@ -21,6 +25,20 @@ function getClient(): Anthropic {
     _client = new Anthropic({ apiKey: process.env['ANTHROPIC_API_KEY'] })
   }
   return _client
+}
+
+export async function setMarketingOptIn(
+  tenantId: string,
+  phone: string,
+  optedIn: boolean
+): Promise<void> {
+  await withTenant(tenantId, (tx) =>
+    optedIn ? optInMarketing(tx, tenantId, phone) : optOutMarketing(tx, tenantId, phone)
+  )
+  logger.info({
+    event: optedIn ? 'marketing_opt_in' : 'marketing_opt_out',
+    phone: phone.slice(0, 6) + '****',
+  })
 }
 
 export async function previewBroadcast(

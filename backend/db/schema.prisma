@@ -273,16 +273,17 @@ model MarketingBroadcast {
 }
 
 model AuditLog {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId   String   @map("tenant_id") @db.Uuid
-  userPhone  String?  @map("user_phone") @db.VarChar(20)
-  action     String   @db.VarChar(100)
-  entityType String?  @map("entity_type") @db.VarChar(50)
-  entityId   String?  @map("entity_id") @db.Uuid
-  oldValue   Json?    @map("old_value")
-  newValue   Json?    @map("new_value")
-  source     String?  @db.VarChar(20)
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  userPhone    String?  @map("user_phone") @db.VarChar(20)
+  actorUserId  String?  @map("actor_user_id") @db.Uuid
+  action       String   @db.VarChar(100)
+  entityType   String?  @map("entity_type") @db.VarChar(50)
+  entityId     String?  @map("entity_id") @db.Uuid
+  oldValue     Json?    @map("old_value")
+  newValue     Json?    @map("new_value")
+  source       String?  @db.VarChar(20)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   @@index([tenantId, createdAt])
   @@map("audit_log")
@@ -301,8 +302,4 @@ model User {
   isActive              Boolean   @default(true) @map("is_active")
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
-  deletedAt             DateTime? @map("deleted_at") @db.Timestamptz()
-
-  @@index([tenantId])
-  @@map("users")
-}
+  deletedAt             DateTime? @map

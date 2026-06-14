@@ -93,7 +93,7 @@ export interface UpdateCustomerParams {
   phone?: string
   notes?: string
   optedInMarketing?: boolean
-  updatedBy?: string
+  actorUserId?: string
 }
 
 export async function editCustomer(
@@ -121,7 +121,7 @@ export async function editCustomer(
 
     await insertAuditLog(tx, {
       tenantId,
-      userPhone: params.updatedBy ?? null,
+      actorUserId: params.actorUserId ?? null,
       action: 'customer.updated',
       entityType: 'customer',
       entityId: customerId,
