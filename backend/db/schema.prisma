@@ -302,4 +302,8 @@ model User {
   isActive              Boolean   @default(true) @map("is_active")
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
-  deletedAt             DateTime? @map
+  deletedAt             DateTime? @map("deleted_at") @db.Timestamptz()
+
+  @@index([tenantId])
+  @@map("users")
+}
