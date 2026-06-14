@@ -63,7 +63,7 @@ describe('Audit rollback — real sale path, audit insert forced to fail', () =>
   beforeAll(async () => {
     app = createApp()
     await cleanupTenant(TENANT_ID)
-    const tenant = await createTestTenant({ id: TENANT_ID, ownerPhone: '+256700000088' })
+    const tenant = await createTestTenant({ id: TENANT_ID, ownerPhone: '+256700000077' })
     token = makeToken(tenant)
     await seedItem(TENANT_ID, {
       id: ITEM_ID, name: 'Sugar', unit: 'kg',

@@ -131,3 +131,7 @@ gezi-ai/  (folder currently named bingwa-ai)
 - Substring item matching silently records wrong items — fuzzy + alias table only
 - Single-item ParsedIntent couldn't handle real messages ("sold 2 sugar 3 soap") — items[] always
 - Never let audit logging be fire-and-forget on financial writes — same transaction
+- audit_log.user_phone is VARCHAR(20) for phone numbers — never write a userId (UUID, 36 chars) into it; the audit insert is in-transaction so the overflow 500s the whole financial write. Web/API actor identity goes in actor_user_id (UUID); user_phone stays for WhatsApp callers.
+- tests/globalSetup.cjs applies migrations explicitly by filename — every NEW migration must be added to its list or the suite is green locally and red on a fresh/CI DB.
+- typecheck (tsconfig) excludes tests/ — run tsconfig.test.json too; a bad identifier in a test compiles-clean under `npm run typecheck` but fails jest.
+- The AppData/FUSE sessions path corrupts files on write (NUL-padding, mid-token truncation, resurrecting .fuse_hidden). Work on native local/WSL storage and commit after every green step — corrupted working-tree files are recoverable from a good git commit; uncommitted work is not.
