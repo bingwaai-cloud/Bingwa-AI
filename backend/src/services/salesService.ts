@@ -1,6 +1,7 @@
 import { AppError, ErrorCodes } from '../utils/AppError.js'
 import { logger } from '../utils/logger.js'
 import { withTenant } from '../db.js'
+import type { Prisma } from '@prisma/client'
 import {
   createSale,
   findSaleById,
@@ -59,7 +60,19 @@ export async function createSaleRecord(
   tenantId: string,
   params: CreateSaleParams
 ): Promise<SaleResult> {
-  // Validate price arithmetic (no DB) before opening a transaction.
+  return withTenant(tenantId, (tx) => createSaleRecordInTransaction(tx, tenantId, params))
+}
+
+/**
+ * Transaction-aware sale creation used when another state change must commit
+ * atomically with the sale (for example, confirmed draft -> committed).
+ */
+export async function createSaleRecordInTransaction(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  params: CreateSaleParams
+): Promise<SaleResult> {
+  // Validate price arithmetic before any writes in this transaction.
   const expectedTotal = params.unitPrice * params.qty
   if (Math.abs(expectedTotal - params.totalPrice) > 1) {
     throw new AppError(
@@ -69,91 +82,89 @@ export async function createSaleRecord(
     )
   }
 
-  return withTenant(tenantId, async (tx) => {
-    // Resolve item (by id or normalized name)
-    const item = params.itemId
-      ? await findItemById(tx, tenantId, params.itemId)
-      : await findItemByName(tx, tenantId, params.itemName.toLowerCase().trim())
+  // Resolve item (by id or normalized name)
+  const item = params.itemId
+    ? await findItemById(tx, tenantId, params.itemId)
+    : await findItemByName(tx, tenantId, params.itemName.toLowerCase().trim())
 
-    if (!item && params.itemId) {
-      throw new AppError(ErrorCodes.ITEM_NOT_FOUND, 'Item not found in inventory', 404)
-    }
-    if (item && item.qtyInStock < params.qty) {
-      throw new AppError(
-        ErrorCodes.INSUFFICIENT_STOCK,
-        `Only ${item.qtyInStock} ${item.unit} of ${item.name} left in stock`,
-        422
-      )
-    }
+  if (!item && params.itemId) {
+    throw new AppError(ErrorCodes.ITEM_NOT_FOUND, 'Item not found in inventory', 404)
+  }
+  if (item && item.qtyInStock < params.qty) {
+    throw new AppError(
+      ErrorCodes.INSUFFICIENT_STOCK,
+      `Only ${item.qtyInStock} ${item.unit} of ${item.name} left in stock`,
+      422
+    )
+  }
 
-    // Auto-link customer by phone (same transaction)
-    let customerId: string | null = null
-    if (params.customerPhone) {
-      customerId = await linkCustomerToSale(
-        tx,
-        tenantId,
-        params.customerPhone,
-        params.customerName ?? null,
-        params.totalPrice
-      )
-    }
-
-    const saleInput: CreateSaleInput = {
+  // Auto-link customer by phone (same transaction)
+  let customerId: string | null = null
+  if (params.customerPhone) {
+    customerId = await linkCustomerToSale(
+      tx,
       tenantId,
-      itemId: item?.id ?? params.itemId ?? null,
-      itemName: item?.name ?? params.itemName,
-      qty: params.qty,
+      params.customerPhone,
+      params.customerName ?? null,
+      params.totalPrice
+    )
+  }
+
+  const saleInput: CreateSaleInput = {
+    tenantId,
+    itemId: item?.id ?? params.itemId ?? null,
+    itemName: item?.name ?? params.itemName,
+    qty: params.qty,
+    unitPrice: params.unitPrice,
+    totalPrice: params.totalPrice,
+    customerId,
+    recordedBy: params.recordedBy ?? null,
+    source: params.source ?? 'api',
+    notes: params.notes ?? null,
+  }
+
+  const sale = await createSale(tx, saleInput)
+  logger.info({ event: 'sale_created', tenantId, saleId: sale.id, itemName: sale.itemName, qty: sale.qty, totalPrice: sale.totalPrice })
+
+  let stockRemaining = item?.qtyInStock ?? 0
+  let isLowStock = false
+  const lowStockThreshold = item?.lowStockThreshold ?? 5
+
+  if (item) {
+    stockRemaining = await decrementStock(tx, tenantId, item.id, params.qty)
+    isLowStock = stockRemaining <= lowStockThreshold
+    if (isLowStock) {
+      logger.warn({ event: 'low_stock_alert', tenantId, itemId: item.id, itemName: item.name, qtyInStock: stockRemaining, threshold: lowStockThreshold })
+    }
+    await insertPriceHistory(tx, {
+      tenantId,
+      itemId: item.id,
+      transactionType: 'sale',
       unitPrice: params.unitPrice,
       totalPrice: params.totalPrice,
-      customerId,
-      recordedBy: params.recordedBy ?? null,
-      source: params.source ?? 'api',
-      notes: params.notes ?? null,
-    }
-
-    const sale = await createSale(tx, saleInput)
-    logger.info({ event: 'sale_created', tenantId, saleId: sale.id, itemName: sale.itemName, qty: sale.qty, totalPrice: sale.totalPrice })
-
-    let stockRemaining = item?.qtyInStock ?? 0
-    let isLowStock = false
-    const lowStockThreshold = item?.lowStockThreshold ?? 5
-
-    if (item) {
-      stockRemaining = await decrementStock(tx, tenantId, item.id, params.qty)
-      isLowStock = stockRemaining <= lowStockThreshold
-      if (isLowStock) {
-        logger.warn({ event: 'low_stock_alert', tenantId, itemId: item.id, itemName: item.name, qtyInStock: stockRemaining, threshold: lowStockThreshold })
-      }
-      await insertPriceHistory(tx, {
-        tenantId,
-        itemId: item.id,
-        transactionType: 'sale',
-        unitPrice: params.unitPrice,
-        totalPrice: params.totalPrice,
-        qty: params.qty,
-      })
-      await updateTypicalPrice(tx, tenantId, item.id, 'sell', params.unitPrice)
-    }
-
-    await insertAuditLog(tx, {
-      tenantId,
-      actorUserId: params.actorUserId ?? null,
-      action: 'sale.created',
-      entityType: 'sale',
-      entityId: sale.id,
-      newValue: { itemName: sale.itemName, qty: sale.qty, unitPrice: sale.unitPrice, totalPrice: sale.totalPrice },
-      source: params.source ?? 'api',
+      qty: params.qty,
     })
+    await updateTypicalPrice(tx, tenantId, item.id, 'sell', params.unitPrice)
+  }
 
-    await createReceiptForSale(tx, {
-      tenantId,
-      saleId: sale.id,
-      items: [{ name: sale.itemName, qty: sale.qty, unitPrice: sale.unitPrice, totalPrice: sale.totalPrice }],
-      totalUgx: sale.totalPrice,
-    })
-
-    return { sale, stockRemaining, isLowStock, lowStockThreshold, itemUnit: item?.unit ?? 'units' }
+  await insertAuditLog(tx, {
+    tenantId,
+    actorUserId: params.actorUserId ?? null,
+    action: 'sale.created',
+    entityType: 'sale',
+    entityId: sale.id,
+    newValue: { itemName: sale.itemName, qty: sale.qty, unitPrice: sale.unitPrice, totalPrice: sale.totalPrice },
+    source: params.source ?? 'api',
   })
+
+  await createReceiptForSale(tx, {
+    tenantId,
+    saleId: sale.id,
+    items: [{ name: sale.itemName, qty: sale.qty, unitPrice: sale.unitPrice, totalPrice: sale.totalPrice }],
+    totalUgx: sale.totalPrice,
+  })
+
+  return { sale, stockRemaining, isLowStock, lowStockThreshold, itemUnit: item?.unit ?? 'units' }
 }
 
 export async function getSaleById(tenantId: string, saleId: string): Promise<Sale> {

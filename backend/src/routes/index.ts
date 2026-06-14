@@ -10,6 +10,7 @@ import { paymentsRouter, paymentCallbackRouter } from './payments.js'
 import { customersRouter } from './customers.js'
 import { marketingRouter } from './marketing.js'
 import { ordersRouter } from './orders.js'
+import { draftsRouter } from './drafts.js'
 import { authenticate } from '../middleware/auth.js'
 import { tenantMiddleware } from '../middleware/tenant.js'
 
@@ -50,6 +51,7 @@ apiRouter.use('/v1/payments',   authenticate, tenantMiddleware, paymentsRouter)
 apiRouter.use('/v1/customers',  authenticate, tenantMiddleware, customersRouter)
 apiRouter.use('/v1/marketing',  authenticate, tenantMiddleware, marketingRouter)
 apiRouter.use('/v1/orders',     authenticate, tenantMiddleware, ordersRouter)
+apiRouter.use('/v1/drafts',     authenticate, tenantMiddleware, draftsRouter)
 
 // Export middleware for use in future module routes
 export { authenticate, tenantMiddleware }

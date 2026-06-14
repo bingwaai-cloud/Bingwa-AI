@@ -135,3 +135,4 @@ gezi-ai/  (folder currently named bingwa-ai)
 - tests/globalSetup.cjs applies migrations explicitly by filename — every NEW migration must be added to its list or the suite is green locally and red on a fresh/CI DB.
 - typecheck (tsconfig) excludes tests/ — run tsconfig.test.json too; a bad identifier in a test compiles-clean under `npm run typecheck` but fails jest.
 - The AppData/FUSE sessions path corrupts files on write (NUL-padding, mid-token truncation, resurrecting .fuse_hidden). Work on native local/WSL storage and commit after every green step — corrupted working-tree files are recoverable from a good git commit; uncommitted work is not.
+- New idempotent migrations must not use DROP for policy recreation; guard CREATE POLICY through pg_policies instead.

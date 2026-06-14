@@ -1,6 +1,11 @@
 import { handleIncomingMessage } from './echoBot.js'
-import { markMessageRead } from './whatsappClient.js'
+import { markMessageRead, sendTextMessage } from './whatsappClient.js'
 import { logger } from '../utils/logger.js'
+import { normalizePhone } from '../utils/phone.js'
+import { findTenantByOwnerPhone } from '../repositories/tenantRepository.js'
+import { resolvePendingDraftMessage, type DraftCommitResult } from '../services/draftsService.js'
+import { AppError } from '../utils/AppError.js'
+import { formatUGX } from '../nlp/normalizers.js'
 
 // ─── Meta webhook payload types ───────────────────────────────────────────────
 
@@ -94,7 +99,7 @@ export async function processWebhookPayload(body: MetaWebhookBody): Promise<void
           // Process in background — don't await here so webhook returns 200 fast
           // Meta will retry if we don't respond within 20 seconds
           setImmediate(() => {
-            void handleIncomingMessage(message.from, message.text.body, message.id).catch((err) => {
+            void processIncomingText(message.from, message.text.body, message.id).catch((err) => {
               logger.error({ event: 'message_processing_error', messageId: message.id, err })
             })
           })
@@ -117,8 +122,48 @@ export async function processWebhookPayload(body: MetaWebhookBody): Promise<void
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+export async function processIncomingText(from: string, text: string, messageId: string): Promise<void> {
+  const phone = normalizePhone(from)
+  const tenant = await findTenantByOwnerPhone(phone)
+
+  if (tenant) {
+    try {
+      // WP-13 moves this thin service delegation to the shared /api/v1 channels adapter.
+      const resolution = await resolvePendingDraftMessage(tenant.id, phone, text)
+      if (resolution) {
+        await sendTextMessage(phone, formatDraftResolution(resolution))
+        return
+      }
+    } catch (err) {
+      if (err instanceof AppError) {
+        await sendTextMessage(phone, err.message)
+        return
+      }
+      throw err
+    }
+  }
+
+  await handleIncomingMessage(from, text, messageId)
+}
+
+function formatDraftResolution(result: DraftCommitResult): string {
+  const payload = result.draft.payload as Record<string, unknown>
+  const item = typeof payload['item'] === 'string'
+    ? payload['item']
+    : typeof payload['expenseName'] === 'string'
+      ? payload['expenseName']
+      : result.committedEntityType
+  const qty = typeof payload['qty'] === 'number' ? ` x ${payload['qty']}` : ''
+  const total = typeof payload['totalPrice'] === 'number' ? `\nTotal: ${formatUGX(payload['totalPrice'])}` : ''
+  const label = result.committedEntityType === 'sale'
+    ? 'Sale'
+    : result.committedEntityType === 'purchase'
+      ? 'Purchase'
+      : 'Expense'
+  return `${label} recorded\n${item}${qty}${total}`
+}
+
 async function sendNonTextReply(from: string, messageId: string): Promise<void> {
-  const { sendTextMessage } = await import('./whatsappClient.js')
   void markMessageRead(messageId)
   await sendTextMessage(from, 'Please send a text message. Voice notes and images coming soon!')
 }
@@ -128,9 +173,6 @@ async function sendNonTextReply(from: string, messageId: string): Promise<void> 
  * Looks up the tenant by the sender's phone, then updates opted_in_marketing = false.
  */
 async function handleStopRequest(fromPhone: string): Promise<void> {
-  const { sendTextMessage } = await import('./whatsappClient.js')
-  const { normalizePhone } = await import('../utils/phone.js')
-  const { findTenantByOwnerPhone } = await import('../repositories/tenantRepository.js')
   const { setMarketingOptIn } = await import('../services/marketingService.js')
 
   const phone = normalizePhone(fromPhone)
@@ -151,9 +193,6 @@ async function handleStopRequest(fromPhone: string): Promise<void> {
  * Looks up the customer record by phone and sets opted_in_marketing = true.
  */
 async function handleStartRequest(fromPhone: string): Promise<void> {
-  const { sendTextMessage } = await import('./whatsappClient.js')
-  const { normalizePhone } = await import('../utils/phone.js')
-  const { findTenantByOwnerPhone } = await import('../repositories/tenantRepository.js')
   const { setMarketingOptIn } = await import('../services/marketingService.js')
 
   const phone = normalizePhone(fromPhone)

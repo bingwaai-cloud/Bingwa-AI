@@ -87,6 +87,7 @@ export async function seedItem(
 export async function cleanupTenant(tenantId: string): Promise<void> {
   await withTenant(tenantId, async (tx) => {
     // Children before parents (FK order).
+    await tx.draftTransaction.deleteMany({})
     await tx.receipt.deleteMany({})
     await tx.priceHistory.deleteMany({})
     await tx.sale.deleteMany({})

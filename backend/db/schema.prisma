@@ -307,3 +307,22 @@ model User {
   @@index([tenantId])
   @@map("users")
 }
+
+model DraftTransaction {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId              String    @map("tenant_id") @db.Uuid
+  userPhone             String    @map("user_phone") @db.VarChar(20)
+  action                String    @db.VarChar(50)
+  payload               Json
+  state                 String    @db.VarChar(30)
+  clarificationQuestion String?   @map("clarification_question")
+  committedEntityId     String?   @map("committed_entity_id") @db.Uuid
+  expiresAt             DateTime  @map("expires_at") @db.Timestamptz()
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt             DateTime? @map("deleted_at") @db.Timestamptz()
+
+  @@index([tenantId, userPhone, state])
+  @@index([tenantId, createdAt])
+  @@map("draft_transactions")
+}

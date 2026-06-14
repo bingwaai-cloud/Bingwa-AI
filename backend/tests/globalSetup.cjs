@@ -37,7 +37,12 @@ module.exports = async function globalSetup() {
   }
 
   const migDir = path.resolve(__dirname, '../db/migrations')
-  const files = ['004_consolidate_tenants.sql', '006_enable_rls.sql', '007_add_actor_user_id.sql']
+  const files = [
+    '004_consolidate_tenants.sql',
+    '006_enable_rls.sql',
+    '007_add_actor_user_id.sql',
+    '008_draft_transactions.sql',
+  ]
 
   const client = new Client({ connectionString: ownerUrl })
   await client.connect()

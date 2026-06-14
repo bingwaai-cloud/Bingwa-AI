@@ -12,6 +12,7 @@ import { addItem, getLowStockItems, listItems } from '../services/inventoryServi
 import { addCustomer } from '../services/customersService.js'
 import { createSupplierRecord } from '../services/suppliersService.js'
 import { recordExpense } from '../services/expensesService.js'
+import { createDraft } from '../services/draftsService.js'
 import { previewBroadcast, sendBroadcast } from '../services/marketingService.js'
 import { logger } from '../utils/logger.js'
 import { normalizePhone, maskPhone } from '../utils/phone.js'
@@ -102,6 +103,15 @@ export async function handleIncomingMessage(
       reply =
         intent.clarificationQuestion ??
         "Sorry, I didn't understand that.\nTry: 'sold 2 sugar at 6500' or 'bought 10 flour at 70k each'"
+      if (intent.action === 'sale' || intent.action === 'purchase' || intent.action === 'expense') {
+        await createDraft(tenant.id, {
+          userPhone: phone,
+          action: intent.action,
+          payload: intent,
+          state: 'pending_clarification',
+          clarificationQuestion: reply,
+        })
+      }
     } else if (intent.action === 'sale') {
       reply = await handleSaleIntent(tenant.id, phone, intent, inventoryItems)
     } else if (intent.action === 'purchase') {
