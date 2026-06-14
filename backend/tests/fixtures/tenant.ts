@@ -17,6 +17,19 @@ export interface TestTenant {
   ownerPhone: string
 }
 
+/**
+ * Derive a deterministic, unique owner phone from the tenant id.
+ * tenants.ownerPhone is UNIQUE; Jest runs suites in parallel, so two suites that
+ * happen to pass the same literal phone with different tenant ids would collide
+ * on INSERT. Deriving from the (unique) tenant id removes that whole class of
+ * flake — callers may still pass ownerPhone, but storage always uses this.
+ */
+function derivePhone(id: string): string {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 100000000
+  return `+2567${String(h).padStart(8, '0')}`
+}
+
 export async function createTestTenant(t: {
   id: string
   ownerPhone: string
@@ -31,13 +44,13 @@ export async function createTestTenant(t: {
       id: t.id,
       businessName: t.businessName ?? 'Test Shop',
       ownerName: 'Tester',
-      ownerPhone: t.ownerPhone,
+      ownerPhone: derivePhone(t.id),
       schemaName,
       country: 'UG',
       currency: 'UGX',
     },
   })
-  return { tenantId: t.id, ownerPhone: t.ownerPhone }
+  return { tenantId: t.id, ownerPhone: derivePhone(t.id) }
 }
 
 export function makeToken(
