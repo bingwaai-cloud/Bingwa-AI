@@ -1,5 +1,5 @@
 /**
- * Payments API — Integration tests
+ * Payments API -- Integration tests (row-level tenancy).
  *
  * Tests the full payment flow:
  *   - POST /api/v1/payments/initiate — trigger MoMo collection
@@ -17,8 +17,8 @@
 
 import { jest } from '@jest/globals'
 import request from 'supertest'
-import jwt from 'jsonwebtoken'
 import { db } from '../../src/db.js'
+import { createTestTenant, makeToken, cleanupTenant, type TestTenant } from '../fixtures/tenant.js'
 import type { Express } from 'express'
 
 // ── Mock external I/O ─────────────────────────────────────────────────────────
@@ -56,16 +56,13 @@ const mockedSend = jest.mocked(whatsappModule.sendTextMessage)
 // ── Fixture constants ─────────────────────────────────────────────────────────
 
 const TEST_TENANT_ID = 'c0ffee01-0000-0000-0000-000000000001'
-const TEST_USER_ID   = 'c0ffee01-0000-0000-0000-000000000002'
-const TEST_SCHEMA    = `tenant_${TEST_TENANT_ID.replace(/-/g, '_')}`
 const TEST_PHONE     = '+256772100001'
 
-function makeToken(): string {
-  return jwt.sign(
-    { userId: TEST_USER_ID, tenantId: TEST_TENANT_ID, schemaName: TEST_SCHEMA, role: 'owner' },
-    process.env['JWT_SECRET']!,
-    { expiresIn: '15m', issuer: 'bingwa-ai' }
-  )
+let tenant: TestTenant
+let token: string
+
+function getToken(): string {
+  return token
 }
 
 // ── Setup / teardown ──────────────────────────────────────────────────────────
@@ -75,40 +72,15 @@ let app: Express
 beforeAll(async () => {
   app = createApp()
 
-  // Create test tenant in public schema
-  await db.$executeRaw`
-    INSERT INTO public.tenants
-      (id, "businessName", "ownerName", "ownerPhone", "schemaName", country, currency, "updatedAt")
-    VALUES
-      (${TEST_TENANT_ID}::uuid, 'Payment Test Shop', 'Pay Tester', ${TEST_PHONE},
-       ${TEST_SCHEMA}, 'UG', 'UGX', NOW())
-    ON CONFLICT (id) DO NOTHING
-  `
-
-  // Create minimal tenant schema (payments are in public schema but service may set search_path)
-  await db.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "${TEST_SCHEMA}"`)
-  // Create users table (required by tenant middleware which sets search_path)
-  await db.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "${TEST_SCHEMA}".users (
-      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id     UUID         NOT NULL,
-      phone         VARCHAR(20)  NOT NULL UNIQUE,
-      name          VARCHAR(255),
-      role          VARCHAR(20)  NOT NULL DEFAULT 'owner',
-      password_hash TEXT         NOT NULL,
-      created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      updated_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      deleted_at    TIMESTAMPTZ
-    )
-  `)
+  await cleanupTenant(TEST_TENANT_ID)
+  tenant = await createTestTenant({ id: TEST_TENANT_ID, ownerPhone: TEST_PHONE, businessName: 'Payment Test Shop' })
+  token = makeToken(tenant)
 })
 
 afterAll(async () => {
-  // Clean up all test payment records
   await db.paymentTransaction.deleteMany({ where: { tenantId: TEST_TENANT_ID } })
   await db.subscription.deleteMany({ where: { tenantId: TEST_TENANT_ID } })
-  await db.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${TEST_SCHEMA}" CASCADE`)
-  await db.tenant.deleteMany({ where: { id: TEST_TENANT_ID } })
+  await cleanupTenant(TEST_TENANT_ID)
   await db.$disconnect()
 })
 
@@ -132,7 +104,7 @@ describe('POST /api/v1/payments/initiate', () => {
   it('initiates a basic plan payment and returns pending status', async () => {
     const res = await request(app)
       .post('/api/v1/payments/initiate')
-      .set('Authorization', `Bearer ${makeToken()}`)
+      .set('Authorization', `Bearer ${getToken()}`)
       .send({ plan: 'basic', phone: TEST_PHONE })
 
     expect(res.status).toBe(202)
@@ -158,7 +130,7 @@ describe('POST /api/v1/payments/initiate', () => {
   it('initiates a pro plan payment with correct amount', async () => {
     const res = await request(app)
       .post('/api/v1/payments/initiate')
-      .set('Authorization', `Bearer ${makeToken()}`)
+      .set('Authorization', `Bearer ${getToken()}`)
       .send({ plan: 'pro', phone: '+256772100002' })
 
     expect(res.status).toBe(202)
@@ -173,7 +145,7 @@ describe('POST /api/v1/payments/initiate', () => {
     // Create a pending payment first
     const firstRes = await request(app)
       .post('/api/v1/payments/initiate')
-      .set('Authorization', `Bearer ${makeToken()}`)
+      .set('Authorization', `Bearer ${getToken()}`)
       .send({ plan: 'basic', phone: TEST_PHONE })
 
     expect(firstRes.status).toBe(202)
@@ -181,7 +153,7 @@ describe('POST /api/v1/payments/initiate', () => {
     // Second request must be rejected
     const secondRes = await request(app)
       .post('/api/v1/payments/initiate')
-      .set('Authorization', `Bearer ${makeToken()}`)
+      .set('Authorization', `Bearer ${getToken()}`)
       .send({ plan: 'basic', phone: TEST_PHONE })
 
     expect(secondRes.status).toBe(409)
@@ -194,7 +166,7 @@ describe('POST /api/v1/payments/initiate', () => {
   it('rejects invalid plan names', async () => {
     const res = await request(app)
       .post('/api/v1/payments/initiate')
-      .set('Authorization', `Bearer ${makeToken()}`)
+      .set('Authorization', `Bearer ${getToken()}`)
       .send({ plan: 'enterprise', phone: TEST_PHONE })
 
     expect(res.status).toBe(400)
@@ -215,7 +187,7 @@ describe('POST /api/v1/payments/initiate', () => {
 
     const res = await request(app)
       .post('/api/v1/payments/initiate')
-      .set('Authorization', `Bearer ${makeToken()}`)
+      .set('Authorization', `Bearer ${getToken()}`)
       .send({ plan: 'basic', phone: TEST_PHONE })
 
     expect(res.status).toBe(502)
@@ -272,7 +244,7 @@ describe('GET /api/v1/payments/:id/status', () => {
   it('returns payment status for own transaction', async () => {
     const res = await request(app)
       .get(`/api/v1/payments/${txId}/status`)
-      .set('Authorization', `Bearer ${makeToken()}`)
+      .set('Authorization', `Bearer ${getToken()}`)
 
     expect(res.status).toBe(200)
     expect(res.body.success).toBe(true)
@@ -287,7 +259,7 @@ describe('GET /api/v1/payments/:id/status', () => {
   it('returns 404 for unknown payment id', async () => {
     const res = await request(app)
       .get('/api/v1/payments/00000000-0000-0000-0000-000000000000/status')
-      .set('Authorization', `Bearer ${makeToken()}`)
+      .set('Authorization', `Bearer ${getToken()}`)
 
     expect(res.status).toBe(404)
     expect(res.body.error.code).toBe('PAYMENT_NOT_FOUND')
@@ -300,6 +272,10 @@ describe('POST /api/payments/callback', () => {
   const REF_ID = 'c0ffee99-0000-0000-0000-000000000001'
 
   beforeEach(async () => {
+    await cleanupTenant(TEST_TENANT_ID)
+    tenant = await createTestTenant({ id: TEST_TENANT_ID, ownerPhone: TEST_PHONE, businessName: 'Payment Test Shop' })
+    token = makeToken(tenant)
+
     // Create a pending transaction that the callback will resolve
     await db.paymentTransaction.upsert({
       where: { id: REF_ID },

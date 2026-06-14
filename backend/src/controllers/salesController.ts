@@ -70,7 +70,6 @@ function formatSaleWhatsApp(result: SaleResult): string {
 
 export const handleCreateSale = asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenantId!
-  const schemaName = req.schemaName!
 
   const parsed = CreateSaleSchema.safeParse(req.body)
   if (!parsed.success) {
@@ -81,7 +80,7 @@ export const handleCreateSale = asyncHandler(async (req: Request, res: Response)
     )
   }
 
-  const result = await createSaleRecord(tenantId, schemaName, {
+  const result = await createSaleRecord(tenantId, {
     itemId: parsed.data.itemId,
     itemName: parsed.data.itemName,
     qty: parsed.data.qty,
@@ -95,7 +94,8 @@ export const handleCreateSale = asyncHandler(async (req: Request, res: Response)
   })
 
   // WhatsApp callers get a plain-text message; all other clients get JSON.
-  const source = req.headers['x-bingwa-source']
+  // legacy header removal: after 2026-08-15
+  const source = req.headers['x-gezi-source'] ?? req.headers['x-bingwa-source']
   if (source === 'whatsapp') {
     res.status(201).json({ message: formatSaleWhatsApp(result) })
     return
@@ -114,26 +114,24 @@ export const handleCreateSale = asyncHandler(async (req: Request, res: Response)
 
 export const handleGetSale = asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenantId!
-  const schemaName = req.schemaName!
   const { id } = req.params
 
   if (!id) throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Sale ID required', 400)
 
-  const sale = await getSaleById(tenantId, schemaName, id)
+  const sale = await getSaleById(tenantId, id)
 
   res.json({ success: true, data: sale })
 })
 
 export const handleListSales = asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenantId!
-  const schemaName = req.schemaName!
 
   const parsed = ListSalesSchema.safeParse(req.query)
   if (!parsed.success) {
     throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid query parameters', 400)
   }
 
-  const result = await listSales(tenantId, schemaName, {
+  const result = await listSales(tenantId, {
     from: parsed.data.from,
     to: parsed.data.to,
     itemId: parsed.data.itemId,
@@ -154,21 +152,19 @@ export const handleListSales = asyncHandler(async (req: Request, res: Response) 
 
 export const handleTodaySummary = asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenantId!
-  const schemaName = req.schemaName!
 
-  const summary = await getTodaySummary(tenantId, schemaName)
+  const summary = await getTodaySummary(tenantId)
 
   res.json({ success: true, data: summary })
 })
 
 export const handleCancelSale = asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenantId!
-  const schemaName = req.schemaName!
   const { id } = req.params
 
   if (!id) throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Sale ID required', 400)
 
-  const sale = await cancelSale(tenantId, schemaName, id)
+  const sale = await cancelSale(tenantId, id)
 
   res.json({ success: true, data: sale })
 })

@@ -129,7 +129,8 @@ async function sendNonTextReply(from: string, messageId: string): Promise<void> 
  */
 async function handleStopRequest(fromPhone: string): Promise<void> {
   const { sendTextMessage } = await import('./whatsappClient.js')
-  const { normalizePhone, schemaNameFromTenantId } = await import('../utils/phone.js')
+  const { normalizePhone } = await import('../utils/phone.js')
+  const { withTenant } = await import('../db.js')
   const { findTenantByOwnerPhone } = await import('../repositories/tenantRepository.js')
   const { optOutMarketing } = await import('../repositories/customersRepository.js')
 
@@ -137,8 +138,7 @@ async function handleStopRequest(fromPhone: string): Promise<void> {
   const tenant = await findTenantByOwnerPhone(phone)
 
   if (tenant) {
-    const schemaName = schemaNameFromTenantId(tenant.id)
-    await optOutMarketing(schemaName, tenant.id, phone)
+    await withTenant(tenant.id, (tx) => optOutMarketing(tx, tenant.id, phone))
     logger.info({ event: 'marketing_opt_out', phone: phone.slice(0, 6) + '****' })
   }
 
@@ -154,7 +154,8 @@ async function handleStopRequest(fromPhone: string): Promise<void> {
  */
 async function handleStartRequest(fromPhone: string): Promise<void> {
   const { sendTextMessage } = await import('./whatsappClient.js')
-  const { normalizePhone, schemaNameFromTenantId } = await import('../utils/phone.js')
+  const { normalizePhone } = await import('../utils/phone.js')
+  const { withTenant } = await import('../db.js')
   const { findTenantByOwnerPhone } = await import('../repositories/tenantRepository.js')
   const { optInMarketing } = await import('../repositories/customersRepository.js')
 
@@ -162,8 +163,7 @@ async function handleStartRequest(fromPhone: string): Promise<void> {
   const tenant = await findTenantByOwnerPhone(phone)
 
   if (tenant) {
-    const schemaName = schemaNameFromTenantId(tenant.id)
-    await optInMarketing(schemaName, tenant.id, phone)
+    await withTenant(tenant.id, (tx) => optInMarketing(tx, tenant.id, phone))
     logger.info({ event: 'marketing_opt_in', phone: phone.slice(0, 6) + '****' })
   }
 

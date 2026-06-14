@@ -22,4 +22,5 @@ module.exports = {
   testMatch: ['**/tests/**/*.test.ts'],
   testTimeout: 30000, // NLP integration tests hit Claude API — allow 30s
   setupFiles: ['<rootDir>/tests/loadEnv.cjs'],
+  globalSetup: '<rootDir>/tests/globalSetup.cjs',
 }

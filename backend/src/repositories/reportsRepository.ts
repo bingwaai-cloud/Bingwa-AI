@@ -1,12 +1,9 @@
-import { Prisma } from '@prisma/client'
-import { db } from '../db.js'
+import type { Prisma } from '@prisma/client'
 
 /**
  * Specialized read-only queries for scheduled report generation.
- * All functions are per-tenant and read from the per-tenant schema.
+ * All functions are per-tenant and run on a tenant-scoped `tx` from withTenant().
  */
-
-// ── Top items by revenue ───────────────────────────────────────────────────────
 
 export interface TopItem {
   itemName: string
@@ -15,36 +12,26 @@ export interface TopItem {
 }
 
 export async function getTopItemsByRevenue(
-  schemaName: string,
+  tx: Prisma.TransactionClient,
   tenantId: string,
   from: Date,
   to: Date,
   limit = 3
 ): Promise<TopItem[]> {
-  const rows = await db.$queryRaw<
-    { itemName: string; totalRevenue: bigint; saleCount: bigint }[]
-  >`
-    SELECT
-      item_name        AS "itemName",
-      SUM(total_price) AS "totalRevenue",
-      COUNT(*)         AS "saleCount"
-    FROM   ${Prisma.raw(`"${schemaName}".sales`)}
-    WHERE  tenant_id  = ${tenantId}::uuid
-    AND    deleted_at IS NULL
-    AND    created_at >= ${from}
-    AND    created_at <= ${to}
-    GROUP  BY item_name
-    ORDER  BY SUM(total_price) DESC
-    LIMIT  ${limit}
-  `
+  const rows = await tx.sale.groupBy({
+    by: ['itemName'],
+    where: { tenantId, deletedAt: null, createdAt: { gte: from, lte: to } },
+    _sum: { totalPrice: true },
+    _count: { _all: true },
+    orderBy: { _sum: { totalPrice: 'desc' } },
+    take: limit,
+  })
   return rows.map((r) => ({
     itemName: r.itemName,
-    totalRevenue: Number(r.totalRevenue),
-    saleCount: Number(r.saleCount),
+    totalRevenue: r._sum.totalPrice ?? 0,
+    saleCount: r._count._all,
   }))
 }
-
-// ── Expenses due soon ──────────────────────────────────────────────────────────
 
 export interface DueExpense {
   name: string
@@ -52,32 +39,19 @@ export interface DueExpense {
   nextDueAt: Date
 }
 
-/**
- * Returns expenses whose next_due_at falls within [from, to].
- */
 export async function getExpensesDueSoon(
-  schemaName: string,
+  tx: Prisma.TransactionClient,
   tenantId: string,
   from: Date,
   to: Date
 ): Promise<DueExpense[]> {
-  const rows = await db.$queryRaw<
-    { name: string; amountUgx: number; nextDueAt: Date }[]
-  >`
-    SELECT
-      name,
-      amount_ugx  AS "amountUgx",
-      next_due_at AS "nextDueAt"
-    FROM   ${Prisma.raw(`"${schemaName}".expenses`)}
-    WHERE  tenant_id   = ${tenantId}::uuid
-    AND    next_due_at >= ${from}
-    AND    next_due_at <= ${to}
-    ORDER  BY next_due_at ASC
-  `
-  return rows
+  const rows = await tx.expense.findMany({
+    where: { tenantId, nextDueAt: { gte: from, lte: to } },
+    orderBy: { nextDueAt: 'asc' },
+    select: { name: true, amountUgx: true, nextDueAt: true },
+  })
+  return rows.map((r) => ({ name: r.name, amountUgx: r.amountUgx, nextDueAt: r.nextDueAt as Date }))
 }
-
-// ── Week-on-week comparison ────────────────────────────────────────────────────
 
 export interface WeekComparison {
   thisWeekRevenue: number
@@ -87,43 +61,29 @@ export interface WeekComparison {
 }
 
 export async function getWeekComparison(
-  schemaName: string,
+  tx: Prisma.TransactionClient,
   tenantId: string,
   thisWeekFrom: Date,
   thisWeekTo: Date,
   lastWeekFrom: Date,
   lastWeekTo: Date
 ): Promise<WeekComparison> {
-  const [thisRows, lastRows] = await Promise.all([
-    db.$queryRaw<{ totalRevenue: bigint; saleCount: bigint }[]>`
-      SELECT
-        COALESCE(SUM(total_price), 0) AS "totalRevenue",
-        COUNT(*)                       AS "saleCount"
-      FROM   ${Prisma.raw(`"${schemaName}".sales`)}
-      WHERE  tenant_id  = ${tenantId}::uuid
-      AND    deleted_at IS NULL
-      AND    created_at >= ${thisWeekFrom}
-      AND    created_at <= ${thisWeekTo}
-    `,
-    db.$queryRaw<{ totalRevenue: bigint; saleCount: bigint }[]>`
-      SELECT
-        COALESCE(SUM(total_price), 0) AS "totalRevenue",
-        COUNT(*)                       AS "saleCount"
-      FROM   ${Prisma.raw(`"${schemaName}".sales`)}
-      WHERE  tenant_id  = ${tenantId}::uuid
-      AND    deleted_at IS NULL
-      AND    created_at >= ${lastWeekFrom}
-      AND    created_at <= ${lastWeekTo}
-    `,
-  ])
-
-  const thisRow = thisRows[0] ?? { totalRevenue: 0n, saleCount: 0n }
-  const lastRow = lastRows[0] ?? { totalRevenue: 0n, saleCount: 0n }
-
+  const base = { tenantId, deletedAt: null }
+  // Sequential (interactive transaction = single connection, no parallel queries).
+  const thisWeek = await tx.sale.aggregate({
+    where: { ...base, createdAt: { gte: thisWeekFrom, lte: thisWeekTo } },
+    _sum: { totalPrice: true },
+    _count: { _all: true },
+  })
+  const lastWeek = await tx.sale.aggregate({
+    where: { ...base, createdAt: { gte: lastWeekFrom, lte: lastWeekTo } },
+    _sum: { totalPrice: true },
+    _count: { _all: true },
+  })
   return {
-    thisWeekRevenue: Number(thisRow.totalRevenue),
-    thisWeekSaleCount: Number(thisRow.saleCount),
-    lastWeekRevenue: Number(lastRow.totalRevenue),
-    lastWeekSaleCount: Number(lastRow.saleCount),
+    thisWeekRevenue: thisWeek._sum.totalPrice ?? 0,
+    thisWeekSaleCount: thisWeek._count._all,
+    lastWeekRevenue: lastWeek._sum.totalPrice ?? 0,
+    lastWeekSaleCount: lastWeek._count._all,
   }
 }

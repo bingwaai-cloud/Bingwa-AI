@@ -30,16 +30,15 @@ const BroadcastSchema = z.object({
  */
 export const handlePreviewBroadcast = asyncHandler(async (req: Request, res: Response) => {
   const tenantId   = req.tenantId!
-  const schemaName = req.schemaName!
 
   const parsed = PreviewSchema.safeParse(req.body)
   if (!parsed.success) {
     throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid preview request', 400)
   }
 
-  const businessName = parsed.data.businessName ?? 'Bingwa Business'
+  const businessName = parsed.data.businessName ?? 'Gezi Business'
 
-  const result = await previewBroadcast(tenantId, schemaName, parsed.data.prompt, businessName)
+  const result = await previewBroadcast(tenantId, parsed.data.prompt, businessName)
 
   res.json({
     success: true,
@@ -60,7 +59,6 @@ export const handlePreviewBroadcast = asyncHandler(async (req: Request, res: Res
  */
 export const handleSendBroadcast = asyncHandler(async (req: Request, res: Response) => {
   const tenantId   = req.tenantId!
-  const schemaName = req.schemaName!
 
   const parsed = BroadcastSchema.safeParse(req.body)
   if (!parsed.success) {
@@ -69,9 +67,10 @@ export const handleSendBroadcast = asyncHandler(async (req: Request, res: Respon
 
   const createdBy = req.user?.userId ?? null
 
-  const result = await sendBroadcast(tenantId, schemaName, parsed.data.message, createdBy)
+  const result = await sendBroadcast(tenantId, parsed.data.message, createdBy)
 
-  const source = req.headers['x-bingwa-source']
+  // legacy header removal: after 2026-08-15
+  const source = req.headers['x-gezi-source'] ?? req.headers['x-bingwa-source']
   if (source === 'whatsapp') {
     res.json({
       message: `📊 Broadcast sent to ${result.sentTo} customers. Delivery results coming shortly.`,
@@ -97,9 +96,8 @@ export const handleSendBroadcast = asyncHandler(async (req: Request, res: Respon
  */
 export const handleListBroadcasts = asyncHandler(async (req: Request, res: Response) => {
   const tenantId   = req.tenantId!
-  const schemaName = req.schemaName!
 
-  const broadcasts = await listBroadcasts(tenantId, schemaName)
+  const broadcasts = await listBroadcasts(tenantId)
 
   res.json({ success: true, data: broadcasts })
 })

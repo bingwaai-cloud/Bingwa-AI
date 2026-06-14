@@ -1,46 +1,11 @@
-import { Prisma } from '@prisma/client'
-import { db } from '../db.js'
+import type { Prisma, Purchase } from '@prisma/client'
 
 /**
- * Purchases (restocking) live in the per-tenant schema.
- * Financial records are NEVER hard-deleted — soft delete only.
+ * Purchases (restocking) live in the public schema, keyed by tenant_id.
+ * Financial records are NEVER hard-deleted -- soft delete only.
+ * All functions run on a tenant-scoped transaction client `tx` from withTenant().
  */
-
-export interface Purchase {
-  id: string
-  tenantId: string
-  itemId: string | null
-  itemName: string
-  qty: number
-  unitPrice: number
-  totalPrice: number
-  supplierId: string | null
-  supplierName: string | null
-  recordedBy: string | null
-  source: string
-  notes: string | null
-  createdAt: Date
-  updatedAt: Date
-  deletedAt: Date | null
-}
-
-const PURCHASE_SELECT = `
-  id::text,
-  tenant_id::text    AS "tenantId",
-  item_id::text      AS "itemId",
-  item_name          AS "itemName",
-  qty,
-  unit_price         AS "unitPrice",
-  total_price        AS "totalPrice",
-  supplier_id::text  AS "supplierId",
-  supplier_name      AS "supplierName",
-  recorded_by        AS "recordedBy",
-  source,
-  notes,
-  created_at         AS "createdAt",
-  updated_at         AS "updatedAt",
-  deleted_at         AS "deletedAt"
-`
+export type { Purchase }
 
 export interface CreatePurchaseInput {
   tenantId: string
@@ -57,53 +22,32 @@ export interface CreatePurchaseInput {
 }
 
 export async function createPurchase(
-  schemaName: string,
+  tx: Prisma.TransactionClient,
   data: CreatePurchaseInput
 ): Promise<Purchase> {
-  const source = data.source ?? 'api'
-  const itemId = data.itemId ?? null
-  const supplierId = data.supplierId ?? null
-  const supplierName = data.supplierName ?? null
-  const recordedBy = data.recordedBy ?? null
-  const notes = data.notes ?? null
-
-  const rows = await db.$queryRaw<Purchase[]>`
-    INSERT INTO ${Prisma.raw(`"${schemaName}".purchases`)}
-      (tenant_id, item_id, item_name, qty, unit_price, total_price,
-       supplier_id, supplier_name, recorded_by, source, notes)
-    VALUES
-      (${data.tenantId}::uuid,
-       ${itemId}::uuid,
-       ${data.itemName},
-       ${data.qty},
-       ${data.unitPrice},
-       ${data.totalPrice},
-       ${supplierId}::uuid,
-       ${supplierName},
-       ${recordedBy},
-       ${source},
-       ${notes})
-    RETURNING ${Prisma.raw(PURCHASE_SELECT)}
-  `
-  const row = rows[0]
-  if (!row) throw new Error('Purchase insert returned no rows')
-  return row
+  return tx.purchase.create({
+    data: {
+      tenantId: data.tenantId,
+      itemId: data.itemId ?? null,
+      itemName: data.itemName,
+      qty: data.qty,
+      unitPrice: data.unitPrice,
+      totalPrice: data.totalPrice,
+      supplierId: data.supplierId ?? null,
+      supplierName: data.supplierName ?? null,
+      recordedBy: data.recordedBy ?? null,
+      source: data.source ?? 'api',
+      notes: data.notes ?? null,
+    },
+  })
 }
 
 export async function findPurchaseById(
-  schemaName: string,
+  tx: Prisma.TransactionClient,
   tenantId: string,
   purchaseId: string
 ): Promise<Purchase | null> {
-  const rows = await db.$queryRaw<Purchase[]>`
-    SELECT ${Prisma.raw(PURCHASE_SELECT)}
-    FROM   ${Prisma.raw(`"${schemaName}".purchases`)}
-    WHERE  id        = ${purchaseId}::uuid
-    AND    tenant_id = ${tenantId}::uuid
-    AND    deleted_at IS NULL
-    LIMIT  1
-  `
-  return rows[0] ?? null
+  return tx.purchase.findFirst({ where: { id: purchaseId, tenantId, deletedAt: null } })
 }
 
 export interface PurchaseFilters {
@@ -122,7 +66,7 @@ export interface PurchasePage {
 }
 
 export async function findPurchases(
-  schemaName: string,
+  tx: Prisma.TransactionClient,
   tenantId: string,
   filters: PurchaseFilters = {}
 ): Promise<PurchasePage> {
@@ -132,65 +76,30 @@ export async function findPurchases(
   const from = filters.from ?? new Date(0)
   const to = filters.to ?? new Date()
 
-  let itemFilter = Prisma.sql``
-  if (filters.itemId) {
-    itemFilter = Prisma.sql`AND item_id = ${filters.itemId}::uuid`
+  const where: Prisma.PurchaseWhereInput = {
+    tenantId,
+    deletedAt: null,
+    createdAt: { gte: from, lte: to },
+    ...(filters.itemId ? { itemId: filters.itemId } : {}),
   }
 
-  const [rows, countRows] = await Promise.all([
-    db.$queryRaw<Purchase[]>`
-      SELECT ${Prisma.raw(PURCHASE_SELECT)}
-      FROM   ${Prisma.raw(`"${schemaName}".purchases`)}
-      WHERE  tenant_id  = ${tenantId}::uuid
-      AND    deleted_at IS NULL
-      AND    created_at >= ${from}
-      AND    created_at <= ${to}
-      ${itemFilter}
-      ORDER  BY created_at DESC
-      LIMIT  ${perPage}
-      OFFSET ${offset}
-    `,
-    db.$queryRaw<{ total: bigint }[]>`
-      SELECT COUNT(*) AS total
-      FROM   ${Prisma.raw(`"${schemaName}".purchases`)}
-      WHERE  tenant_id  = ${tenantId}::uuid
-      AND    deleted_at IS NULL
-      AND    created_at >= ${from}
-      AND    created_at <= ${to}
-      ${itemFilter}
-    `,
-  ])
+  // Sequential (interactive transaction = single connection, no parallel queries).
+  const purchases = await tx.purchase.findMany({ where, orderBy: { createdAt: 'desc' }, skip: offset, take: perPage })
+  const total = await tx.purchase.count({ where })
 
-  return {
-    purchases: rows,
-    total: Number(countRows[0]?.total ?? 0),
-    page,
-    perPage,
-  }
+  return { purchases, total, page, perPage }
 }
 
-/**
- * Total spend and purchase count for a given date range.
- */
 export async function getDailyPurchaseSummary(
-  schemaName: string,
+  tx: Prisma.TransactionClient,
   tenantId: string,
   from: Date,
   to: Date
 ): Promise<{ totalSpend: number; purchaseCount: number }> {
-  const rows = await db.$queryRaw<{ totalSpend: bigint; purchaseCount: bigint }[]>`
-    SELECT
-      COALESCE(SUM(total_price), 0) AS "totalSpend",
-      COUNT(*)                       AS "purchaseCount"
-    FROM ${Prisma.raw(`"${schemaName}".purchases`)}
-    WHERE tenant_id  = ${tenantId}::uuid
-    AND   deleted_at IS NULL
-    AND   created_at >= ${from}
-    AND   created_at <= ${to}
-  `
-  const row = rows[0] ?? { totalSpend: 0n, purchaseCount: 0n }
-  return {
-    totalSpend: Number(row.totalSpend),
-    purchaseCount: Number(row.purchaseCount),
-  }
+  const agg = await tx.purchase.aggregate({
+    where: { tenantId, deletedAt: null, createdAt: { gte: from, lte: to } },
+    _sum: { totalPrice: true },
+    _count: { _all: true },
+  })
+  return { totalSpend: agg._sum.totalPrice ?? 0, purchaseCount: agg._count._all }
 }

@@ -1,47 +1,39 @@
 import type { Request, Response, NextFunction } from 'express'
-import { db } from '../db.js'
 import { AppError, ErrorCodes } from '../utils/AppError.js'
 import { logger } from '../utils/logger.js'
 
 /**
- * Tenant schema middleware — must run AFTER authenticate().
+ * Tenant context middleware -- must run AFTER authenticate().
  *
- * Sets PostgreSQL search_path to the tenant's private schema so that
- * all subsequent queries in this request resolve against the correct schema.
+ * Row-level multi-tenancy (P0-1): tenant isolation is NO LONGER established by
+ * switching the connection's search_path. That was connection-level and could
+ * leak across Prisma's pooled connections. Instead, each tenant-scoped write/read
+ * runs inside withTenant(tenantId, ...) (see src/db.ts), which sets app.tenant_id
+ * transaction-locally and lets Postgres RLS enforce isolation.
  *
- * ⚠️  MVP note: SET search_path is connection-level in PostgreSQL.
- * With Prisma's connection pool, a connection reused by another request
- * before the search_path is reset could operate on the wrong schema.
- * This is acceptable for Phase 1 (1–3 pilot shops, low concurrency).
- * Phase 2 will replace this with SET LOCAL inside explicit transactions.
+ * This middleware therefore does NO database work. It only validates that a
+ * tenant id is present and well-formed, and leaves it on req.tenantId
+ * (authenticate() attached it from the JWT). Repositories pick it up from there.
  */
-export async function tenantMiddleware(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
-  const schemaName = req.schemaName
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-  if (!schemaName) {
+export function tenantMiddleware(
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): void {
+  const tenantId = req.tenantId
+
+  if (!tenantId) {
     next(new AppError(ErrorCodes.FORBIDDEN, 'Tenant context missing', 403))
     return
   }
 
-  // Validate format to prevent SQL injection.
-  // Schema names are always tenant_{uuid_with_underscores}: 7 + 36 = 43 chars total.
-  // UUID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx → replace - with _ → 36 chars.
-  if (!/^tenant_[0-9a-f_]{36}$/.test(schemaName)) {
-    logger.warn({ event: 'invalid_schema_name', schemaName })
+  if (!UUID_RE.test(tenantId)) {
+    logger.warn({ event: 'invalid_tenant_id' })
     next(new AppError(ErrorCodes.FORBIDDEN, 'Invalid tenant context', 403))
     return
   }
 
-  try {
-    // Using raw string interpolation is safe here because we validated the format above
-    await db.$executeRawUnsafe(`SET search_path TO ${schemaName}, public`)
-    next()
-  } catch (err) {
-    logger.error({ event: 'tenant_schema_switch_failed', schemaName, err })
-    next(new AppError(ErrorCodes.INTERNAL_ERROR, 'Failed to establish tenant context', 500))
-  }
+  next()
 }

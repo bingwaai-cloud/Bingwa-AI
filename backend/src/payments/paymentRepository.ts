@@ -4,7 +4,7 @@
  */
 
 import { db } from '../db.js'
-import type { PaymentTransaction } from '@prisma/client'
+import type { Prisma, PaymentTransaction } from '@prisma/client'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -65,9 +65,11 @@ export async function findPaymentByProviderRef(
 
 export async function updatePaymentStatus(
   id: string,
-  status: PaymentStatus
+  status: PaymentStatus,
+  tx?: Prisma.TransactionClient
 ): Promise<PaymentTransaction> {
-  return db.paymentTransaction.update({
+  const client = tx ?? db
+  return client.paymentTransaction.update({
     where: { id },
     data: { status },
   })
@@ -75,16 +77,18 @@ export async function updatePaymentStatus(
 
 /**
  * Find payments that have been pending for longer than `ageMs` milliseconds.
- * Used by the scheduler timeout job (default: 10 minutes).
+ * Pass `provider` to scope the check to one provider (prevents MTN job polling Airtel txns).
  */
 export async function findPendingPaymentsOlderThan(
-  ageMs: number
+  ageMs: number,
+  provider?: PaymentProvider
 ): Promise<PaymentTransaction[]> {
   const cutoff = new Date(Date.now() - ageMs)
   return db.paymentTransaction.findMany({
     where: {
       status:    'pending',
       createdAt: { lt: cutoff },
+      ...(provider ? { provider } : {}),
     },
   })
 }

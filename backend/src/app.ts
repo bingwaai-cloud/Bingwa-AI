@@ -17,6 +17,7 @@ export function createApp(): express.Express {
 
   // ─── CORS ─────────────────────────────────────────────────────────────────
   const allowedOrigins = [
+    // CORS domains pending DNS rename (bingwa → gezi)
     'https://bingwa.ai',
     'https://app.bingwa.ai',
     process.env['NODE_ENV'] !== 'production' ? 'http://localhost:3000' : '',
@@ -81,7 +82,7 @@ export function createApp(): express.Express {
   // Root route — shown when someone opens the URL in a browser
   app.get('/', (_req, res) => {
     res.json({
-      name:        'Bingwa AI API',
+      name:        'Gezi AI API',
       tagline:     'The Champion of your business.',
       status:      'live',
       version:     process.env['npm_package_version'] ?? '0.1.0',

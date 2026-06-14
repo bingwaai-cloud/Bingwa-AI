@@ -37,7 +37,6 @@ const ListCustomersSchema = z.object({
 
 export const handleCreateCustomer = asyncHandler(async (req: Request, res: Response) => {
   const tenantId    = req.tenantId!
-  const schemaName  = req.schemaName!
 
   const parsed = CreateCustomerSchema.safeParse(req.body)
   if (!parsed.success) {
@@ -50,9 +49,10 @@ export const handleCreateCustomer = asyncHandler(async (req: Request, res: Respo
     throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Provide at least a phone number or name', 400)
   }
 
-  const customer = await addCustomer(tenantId, schemaName, { phone, name, notes, source })
+  const customer = await addCustomer(tenantId, { phone, name, notes, source })
 
-  const whatsappSource = req.headers['x-bingwa-source']
+  // legacy header removal: after 2026-08-15
+  const whatsappSource = req.headers['x-gezi-source'] ?? req.headers['x-bingwa-source']
   if (whatsappSource === 'whatsapp') {
     const label = customer.name ?? customer.phone ?? 'Customer'
     res.status(201).json({ message: `✅ ${label} added to your customer list.` })
@@ -64,26 +64,24 @@ export const handleCreateCustomer = asyncHandler(async (req: Request, res: Respo
 
 export const handleGetCustomer = asyncHandler(async (req: Request, res: Response) => {
   const tenantId   = req.tenantId!
-  const schemaName = req.schemaName!
   const { id }     = req.params
 
   if (!id) throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Customer ID required', 400)
 
-  const customer = await getCustomerById(tenantId, schemaName, id)
+  const customer = await getCustomerById(tenantId, id)
 
   res.json({ success: true, data: customer })
 })
 
 export const handleListCustomers = asyncHandler(async (req: Request, res: Response) => {
   const tenantId   = req.tenantId!
-  const schemaName = req.schemaName!
 
   const parsed = ListCustomersSchema.safeParse(req.query)
   if (!parsed.success) {
     throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid query parameters', 400)
   }
 
-  const result = await listCustomers(tenantId, schemaName, {
+  const result = await listCustomers(tenantId, {
     search:  parsed.data.search,
     page:    parsed.data.page,
     perPage: parsed.data.perPage,
@@ -102,16 +100,14 @@ export const handleListCustomers = asyncHandler(async (req: Request, res: Respon
 
 export const handleGetSegments = asyncHandler(async (req: Request, res: Response) => {
   const tenantId   = req.tenantId!
-  const schemaName = req.schemaName!
 
-  const result = await getCustomerSegments(tenantId, schemaName)
+  const result = await getCustomerSegments(tenantId)
 
   res.json({ success: true, data: result })
 })
 
 export const handleUpdateCustomer = asyncHandler(async (req: Request, res: Response) => {
   const tenantId   = req.tenantId!
-  const schemaName = req.schemaName!
   const { id }     = req.params
 
   if (!id) throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Customer ID required', 400)
@@ -121,7 +117,7 @@ export const handleUpdateCustomer = asyncHandler(async (req: Request, res: Respo
     throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid update data', 400)
   }
 
-  const updated = await editCustomer(tenantId, schemaName, id, {
+  const updated = await editCustomer(tenantId, id, {
     ...parsed.data,
     updatedBy: req.user?.userId,
   })
@@ -131,12 +127,11 @@ export const handleUpdateCustomer = asyncHandler(async (req: Request, res: Respo
 
 export const handleDeleteCustomer = asyncHandler(async (req: Request, res: Response) => {
   const tenantId   = req.tenantId!
-  const schemaName = req.schemaName!
   const { id }     = req.params
 
   if (!id) throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Customer ID required', 400)
 
-  await removeCustomer(tenantId, schemaName, id)
+  await removeCustomer(tenantId, id)
 
   res.status(204).send()
 })

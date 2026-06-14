@@ -59,9 +59,8 @@ function formatAdjustWhatsApp(result: StockAdjustResult, itemName: string): stri
 
 export const handleListItems = asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenantId!
-  const schemaName = req.schemaName!
 
-  const result = await listItems(tenantId, schemaName)
+  const result = await listItems(tenantId)
 
   res.json({
     success: true,
@@ -75,21 +74,19 @@ export const handleListItems = asyncHandler(async (req: Request, res: Response) 
 
 export const handleGetItem = asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenantId!
-  const schemaName = req.schemaName!
   const { id } = req.params
 
   if (!id) throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Item ID required', 400)
 
-  const item = await getItemById(tenantId, schemaName, id)
+  const item = await getItemById(tenantId, id)
 
   res.json({ success: true, data: item })
 })
 
 export const handleLowStock = asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenantId!
-  const schemaName = req.schemaName!
 
-  const items = await getLowStockItems(tenantId, schemaName)
+  const items = await getLowStockItems(tenantId)
 
   res.json({
     success: true,
@@ -100,14 +97,13 @@ export const handleLowStock = asyncHandler(async (req: Request, res: Response) =
 
 export const handleCreateItem = asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenantId!
-  const schemaName = req.schemaName!
 
   const parsed = CreateItemSchema.safeParse(req.body)
   if (!parsed.success) {
     throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid item data', 400)
   }
 
-  const item = await addItem(tenantId, schemaName, {
+  const item = await addItem(tenantId, {
     name: parsed.data.name,
     aliases: parsed.data.aliases,
     unit: parsed.data.unit,
@@ -122,7 +118,6 @@ export const handleCreateItem = asyncHandler(async (req: Request, res: Response)
 
 export const handleUpdateItem = asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenantId!
-  const schemaName = req.schemaName!
   const { id } = req.params
 
   if (!id) throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Item ID required', 400)
@@ -132,16 +127,15 @@ export const handleUpdateItem = asyncHandler(async (req: Request, res: Response)
     throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid item data', 400)
   }
 
-  const item = await updateItem(tenantId, schemaName, id, parsed.data)
+  const item = await updateItem(tenantId, id, parsed.data)
 
   res.json({ success: true, data: item })
 })
 
 export const handleOutOfStock = asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenantId!
-  const schemaName = req.schemaName!
 
-  const items = await getOutOfStockItems(tenantId, schemaName)
+  const items = await getOutOfStockItems(tenantId)
 
   res.json({
     success: true,
@@ -152,7 +146,6 @@ export const handleOutOfStock = asyncHandler(async (req: Request, res: Response)
 
 export const handleStockAdjust = asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenantId!
-  const schemaName = req.schemaName!
   const { id } = req.params
 
   if (!id) throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Item ID required', 400)
@@ -162,9 +155,10 @@ export const handleStockAdjust = asyncHandler(async (req: Request, res: Response
     throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid adjustment data', 400)
   }
 
-  const result = await adjustStock(tenantId, schemaName, id, parsed.data.adjustment, parsed.data.reason)
+  const result = await adjustStock(tenantId, id, parsed.data.adjustment, parsed.data.reason)
 
-  const source = req.headers['x-bingwa-source']
+  // legacy header removal: after 2026-08-15
+  const source = req.headers['x-gezi-source'] ?? req.headers['x-bingwa-source']
   if (source === 'whatsapp') {
     res.json({ message: formatAdjustWhatsApp(result, result.item.name) })
     return

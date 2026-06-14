@@ -34,14 +34,13 @@ const ListPurchasesSchema = z.object({
 
 export const handleCreatePurchase = asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenantId!
-  const schemaName = req.schemaName!
 
   const parsed = CreatePurchaseSchema.safeParse(req.body)
   if (!parsed.success) {
     throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid purchase data', 400)
   }
 
-  const result = await createPurchaseRecord(tenantId, schemaName, {
+  const result = await createPurchaseRecord(tenantId, {
     itemId: parsed.data.itemId,
     itemName: parsed.data.itemName,
     qty: parsed.data.qty,
@@ -65,26 +64,24 @@ export const handleCreatePurchase = asyncHandler(async (req: Request, res: Respo
 
 export const handleGetPurchase = asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenantId!
-  const schemaName = req.schemaName!
   const { id } = req.params
 
   if (!id) throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Purchase ID required', 400)
 
-  const purchase = await getPurchaseById(tenantId, schemaName, id)
+  const purchase = await getPurchaseById(tenantId, id)
 
   res.json({ success: true, data: purchase })
 })
 
 export const handleListPurchases = asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenantId!
-  const schemaName = req.schemaName!
 
   const parsed = ListPurchasesSchema.safeParse(req.query)
   if (!parsed.success) {
     throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid query parameters', 400)
   }
 
-  const result = await listPurchases(tenantId, schemaName, {
+  const result = await listPurchases(tenantId, {
     from: parsed.data.from,
     to: parsed.data.to,
     itemId: parsed.data.itemId,

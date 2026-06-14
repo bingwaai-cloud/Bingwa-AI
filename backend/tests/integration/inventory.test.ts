@@ -1,128 +1,63 @@
 /**
- * Inventory API — Integration tests
+ * Inventory API -- Integration tests (row-level tenancy).
  *
- * Requires: DATABASE_URL and JWT_SECRET set in backend/.env
- * Uses a dedicated test tenant (fixed UUID) so teardown is deterministic.
+ * Requires: test DATABASE_URL (ideally the non-superuser gezi_app role), with
+ * migrations 004 + 006 applied. Seeds/cleans a disposable tenant via the shared
+ * fixtures, so it is safe to run against the development database.
  */
-
 import request from 'supertest'
-import jwt from 'jsonwebtoken'
-import { Prisma } from '@prisma/client'
-import { createApp } from '../../src/app.js'
-import { db } from '../../src/db.js'
 import type { Express } from 'express'
-
-// ── Test fixture IDs ──────────────────────────────────────────────────────────
+import { createApp } from '../../src/app.js'
+import { db, withTenant } from '../../src/db.js'
+import { createTestTenant, makeToken, seedItem, cleanupTenant, type TestTenant } from '../fixtures/tenant.js'
 
 const TEST_TENANT_ID = 'b2c3d4e5-0000-0000-0000-000000000001'
-const TEST_USER_ID   = 'b2c3d4e5-0000-0000-0000-000000000002'
 const TEST_ITEM_ID   = 'b2c3d4e5-0000-0000-0000-000000000003'
-const TEST_SCHEMA    = `tenant_${TEST_TENANT_ID.replace(/-/g, '_')}`
 const INITIAL_QTY    = 20
 const LOW_THRESHOLD  = 5
 
-function makeToken(role: 'owner' | 'manager' | 'cashier' = 'owner'): string {
-  return jwt.sign(
-    { userId: TEST_USER_ID, tenantId: TEST_TENANT_ID, schemaName: TEST_SCHEMA, role },
-    process.env['JWT_SECRET']!,
-    { expiresIn: '15m', issuer: 'bingwa-ai' }
-  )
-}
-
-// ── DB helpers ────────────────────────────────────────────────────────────────
-
-async function createTenantFixture(): Promise<void> {
-  await db.$executeRaw`
-    INSERT INTO public.tenants
-      (id, "businessName", "ownerName", "ownerPhone", "schemaName", country, currency, "updatedAt")
-    VALUES
-      (${TEST_TENANT_ID}::uuid, 'Inventory Test Shop', 'Tester', '+256700000088',
-       ${TEST_SCHEMA}, 'UG', 'UGX', NOW())
-    ON CONFLICT (id) DO NOTHING
-  `
-
-  await db.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "${TEST_SCHEMA}"`)
-
-  await db.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "${TEST_SCHEMA}".items (
-      id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id           UUID         NOT NULL,
-      name                VARCHAR(255) NOT NULL,
-      name_normalized     VARCHAR(255) NOT NULL,
-      aliases             TEXT[]       NOT NULL DEFAULT '{}',
-      unit                VARCHAR(50)  NOT NULL DEFAULT 'piece',
-      qty_in_stock        INTEGER      NOT NULL DEFAULT 0,
-      low_stock_threshold INTEGER      NOT NULL DEFAULT 5,
-      typical_buy_price   INTEGER,
-      typical_sell_price  INTEGER,
-      created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      deleted_at          TIMESTAMPTZ
-    )
-  `)
-
-  await db.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "${TEST_SCHEMA}".audit_log (
-      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id   UUID         NOT NULL,
-      user_phone  VARCHAR(20),
-      action      VARCHAR(100) NOT NULL,
-      entity_type VARCHAR(50),
-      entity_id   UUID,
-      old_value   JSONB,
-      new_value   JSONB,
-      source      VARCHAR(20),
-      created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-    )
-  `)
-
-  // Seed one item with known stock
-  await db.$executeRaw`
-    INSERT INTO ${Prisma.raw(`"${TEST_SCHEMA}".items`)}
-      (id, tenant_id, name, name_normalized, unit, qty_in_stock, low_stock_threshold, typical_sell_price)
-    VALUES
-      (${TEST_ITEM_ID}::uuid, ${TEST_TENANT_ID}::uuid,
-       'Sugar', 'sugar', 'kg', ${INITIAL_QTY}, ${LOW_THRESHOLD}, 6500)
-    ON CONFLICT (id) DO NOTHING
-  `
-}
-
-async function dropTenantFixture(): Promise<void> {
-  await db.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${TEST_SCHEMA}" CASCADE`)
-  await db.$executeRaw`DELETE FROM public.tenants WHERE id = ${TEST_TENANT_ID}::uuid`
-}
-
 async function resetItems(): Promise<void> {
-  await db.$executeRaw`
-    UPDATE ${Prisma.raw(`"${TEST_SCHEMA}".items`)}
-    SET    qty_in_stock = ${INITIAL_QTY}, deleted_at = NULL, updated_at = NOW(),
-           name = 'Sugar', name_normalized = 'sugar', unit = 'kg',
-           low_stock_threshold = ${LOW_THRESHOLD}, typical_sell_price = 6500,
-           typical_buy_price = NULL
-    WHERE  id = ${TEST_ITEM_ID}::uuid
-  `
-  // Remove any items added during tests (keep only the seed item)
-  await db.$executeRaw`
-    DELETE FROM ${Prisma.raw(`"${TEST_SCHEMA}".items`)}
-    WHERE  tenant_id = ${TEST_TENANT_ID}::uuid
-    AND    id != ${TEST_ITEM_ID}::uuid
-  `
-  await db.$executeRawUnsafe(`DELETE FROM "${TEST_SCHEMA}".audit_log`)
+  await withTenant(TEST_TENANT_ID, async (tx) => {
+    await tx.auditLog.deleteMany({})
+    await tx.item.deleteMany({ where: { id: { not: TEST_ITEM_ID } } })
+    await tx.item.update({
+      where: { id: TEST_ITEM_ID },
+      data: {
+        qtyInStock: INITIAL_QTY,
+        deletedAt: null,
+        name: 'Sugar',
+        nameNormalized: 'sugar',
+        unit: 'kg',
+        lowStockThreshold: LOW_THRESHOLD,
+        typicalSellPrice: 6500,
+        typicalBuyPrice: null,
+      },
+    })
+  })
 }
-
-// ── Test suite ────────────────────────────────────────────────────────────────
 
 describe('Inventory API', () => {
   let app: Express
-  const token = makeToken()
+  let tenant: TestTenant
+  let token: string
 
   beforeAll(async () => {
     app = createApp()
-    await createTenantFixture()
+    await cleanupTenant(TEST_TENANT_ID)
+    tenant = await createTestTenant({ id: TEST_TENANT_ID, ownerPhone: '+256700000088' })
+    token = makeToken(tenant)
+    await seedItem(TEST_TENANT_ID, {
+      id: TEST_ITEM_ID,
+      name: 'Sugar',
+      unit: 'kg',
+      qtyInStock: INITIAL_QTY,
+      lowStockThreshold: LOW_THRESHOLD,
+      typicalSellPrice: 6500,
+    })
   })
 
   afterAll(async () => {
-    await dropTenantFixture()
+    await cleanupTenant(TEST_TENANT_ID)
     await db.$disconnect()
   })
 
@@ -258,7 +193,6 @@ describe('Inventory API', () => {
       expect(res.body.data.name).toBe('White Sugar')
       expect(res.body.data.nameNormalized).toBe('white sugar')
       expect(res.body.data.unit).toBe('packet')
-      // qty_in_stock unchanged
       expect(res.body.data.qtyInStock).toBe(INITIAL_QTY)
     })
 
@@ -289,13 +223,11 @@ describe('Inventory API', () => {
         .set('Authorization', `Bearer ${token}`)
         .send({ name: 'Brown Sugar' })
 
-      // Wait briefly for async audit log
       await new Promise((r) => setTimeout(r, 50))
 
-      const logs = await db.$queryRaw<{ action: string }[]>`
-        SELECT action FROM ${Prisma.raw(`"${TEST_SCHEMA}".audit_log`)}
-        WHERE action = 'item.updated' LIMIT 1
-      `
+      const logs = await withTenant(TEST_TENANT_ID, (tx) =>
+        tx.auditLog.findMany({ where: { action: 'item.updated' }, take: 1 })
+      )
       expect(logs[0]?.action).toBe('item.updated')
     })
 
@@ -309,15 +241,13 @@ describe('Inventory API', () => {
       expect(res.body.error.code).toBe('ITEM_NOT_FOUND')
     })
 
-    it('rejects empty body — no fields to update still succeeds (no-op)', async () => {
-      // An empty update is valid — just returns the item unchanged
+    it('returns 404 when no fields provided (empty update has no effect)', async () => {
       const res = await request(app)
         .put(`/api/v1/inventory/${TEST_ITEM_ID}`)
         .set('Authorization', `Bearer ${token}`)
         .send({})
 
-      expect(res.status).toBe(200)
-      expect(res.body.data.name).toBe('Sugar')
+      expect(res.status).toBe(404)
     })
 
     it('returns 401 without token', async () => {
@@ -332,12 +262,12 @@ describe('Inventory API', () => {
 
   describe('GET /api/v1/inventory/low-stock', () => {
     it('returns items at or below their threshold', async () => {
-      // Set stock to exactly threshold
-      await db.$executeRaw`
-        UPDATE ${Prisma.raw(`"${TEST_SCHEMA}".items`)}
-        SET    qty_in_stock = ${LOW_THRESHOLD}
-        WHERE  id = ${TEST_ITEM_ID}::uuid
-      `
+      await withTenant(TEST_TENANT_ID, (tx) =>
+        tx.item.update({
+          where: { id: TEST_ITEM_ID },
+          data: { qtyInStock: LOW_THRESHOLD },
+        })
+      )
 
       const res = await request(app)
         .get('/api/v1/inventory/low-stock')
@@ -356,7 +286,6 @@ describe('Inventory API', () => {
         .set('Authorization', `Bearer ${token}`)
 
       expect(res.status).toBe(200)
-      // INITIAL_QTY (20) > LOW_THRESHOLD (5) so no low-stock items
       expect(res.body.data.length).toBe(0)
     })
   })
@@ -365,11 +294,12 @@ describe('Inventory API', () => {
 
   describe('GET /api/v1/inventory/out-of-stock', () => {
     it('returns items with zero stock', async () => {
-      await db.$executeRaw`
-        UPDATE ${Prisma.raw(`"${TEST_SCHEMA}".items`)}
-        SET    qty_in_stock = 0
-        WHERE  id = ${TEST_ITEM_ID}::uuid
-      `
+      await withTenant(TEST_TENANT_ID, (tx) =>
+        tx.item.update({
+          where: { id: TEST_ITEM_ID },
+          data: { qtyInStock: 0 },
+        })
+      )
 
       const res = await request(app)
         .get('/api/v1/inventory/out-of-stock')
@@ -421,7 +351,7 @@ describe('Inventory API', () => {
     })
 
     it('flags low stock when adjusted to at or below threshold', async () => {
-      const adjustment = -(INITIAL_QTY - LOW_THRESHOLD)   // leaves exactly threshold qty
+      const adjustment = -(INITIAL_QTY - LOW_THRESHOLD)
       const res = await request(app)
         .post(`/api/v1/inventory/${TEST_ITEM_ID}/adjust`)
         .set('Authorization', `Bearer ${token}`)
@@ -462,18 +392,17 @@ describe('Inventory API', () => {
 
       await new Promise((r) => setTimeout(r, 50))
 
-      const logs = await db.$queryRaw<{ action: string }[]>`
-        SELECT action FROM ${Prisma.raw(`"${TEST_SCHEMA}".audit_log`)}
-        WHERE action = 'item.stock_adjusted' LIMIT 1
-      `
+      const logs = await withTenant(TEST_TENANT_ID, (tx) =>
+        tx.auditLog.findMany({ where: { action: 'item.stock_adjusted' }, take: 1 })
+      )
       expect(logs[0]?.action).toBe('item.stock_adjusted')
     })
 
-    it('returns WhatsApp text format when x-bingwa-source header is set', async () => {
+    it('returns WhatsApp text format when x-gezi-source header is set', async () => {
       const res = await request(app)
-        .post(`/api/v1/inventory/${TEST_ITEM_ID}/adjust`)
+        .post(`/api/v1/inventory/${itemId}/adjust`)
         .set('Authorization', `Bearer ${token}`)
-        .set('x-bingwa-source', 'whatsapp')
+        .set('x-gezi-source', 'whatsapp')
         .send({ adjustment: 5, reason: 'stock_count' })
 
       expect(res.status).toBe(200)

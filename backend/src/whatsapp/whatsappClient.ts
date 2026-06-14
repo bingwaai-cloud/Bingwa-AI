@@ -18,7 +18,7 @@ function getAccessToken(): string {
 /**
  * Sends a plain-text WhatsApp message to a phone number.
  * Phone must be in E.164 format (+256XXXXXXXXX) — strip the leading + for Meta API.
- * Keeps messages under 300 characters (Bingwa standard for conversational replies).
+ * Keeps messages under 300 characters (Gezi standard for conversational replies).
  */
 export async function sendTextMessage(to: string, text: string): Promise<void> {
   // Meta API wants the number without the leading +

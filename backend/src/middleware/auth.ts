@@ -9,7 +9,7 @@ export interface JwtPayload {
   role: 'owner' | 'manager' | 'cashier'
 }
 
-// Extend Express Request with Bingwa-specific fields
+// Extend Express Request with Gezi-specific fields
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
@@ -41,7 +41,14 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
   }
 
   try {
-    const payload = jwt.verify(token, secret, { issuer: 'bingwa-ai' }) as JwtPayload
+    // Dual-accept: new tokens emit gezi-ai, old tokens have bingwa-ai
+    // legacy issuer removal: after 2026-08-15
+    let payload: JwtPayload
+    try {
+      payload = jwt.verify(token, secret, { issuer: 'gezi-ai' }) as JwtPayload
+    } catch (firstErr) {
+      payload = jwt.verify(token, secret, { issuer: 'bingwa-ai' }) as JwtPayload
+    }
     req.user = payload
     req.tenantId = payload.tenantId
     req.schemaName = payload.schemaName

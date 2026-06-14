@@ -8,6 +8,9 @@ import {
   handleMomoCallback,
   getPaymentStatus,
   isPlanKey,
+  initiateAirtelSubscriptionPayment,
+  handleAirtelCallback,
+  type AirtelCallbackPayload,
 } from '../payments/paymentService.js'
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
@@ -15,6 +18,15 @@ import {
 const InitiatePaymentSchema = z.object({
   plan:  z.enum(['basic', 'pro']),
   phone: z.string().min(9).max(20),  // normalizePhone handles formatting
+})
+
+const AirtelCallbackSchema = z.object({
+  transaction: z.object({
+    id:              z.string(),
+    status_code:     z.string(),
+    airtel_money_id: z.string().optional(),
+    message:         z.string().optional(),
+  }),
 })
 
 const MomoCallbackSchema = z.object({
@@ -94,6 +106,60 @@ export const momoCallback = asyncHandler(async (req: Request, res: Response) => 
   setImmediate(() => {
     void handleMomoCallback(parsed.data).catch((err) => {
       logger.error({ event: 'momo_callback_processing_error', err })
+    })
+  })
+})
+
+/**
+ * POST /api/v1/payments/airtel/initiate
+ *
+ * Authenticated. Triggers an Airtel Money USSD push to the provided phone.
+ */
+export const initiateAirtelPayment = asyncHandler(async (req: Request, res: Response) => {
+  const parsed = InitiatePaymentSchema.safeParse(req.body)
+  if (!parsed.success) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, parsed.error.errors[0]?.message ?? 'Invalid input')
+  }
+
+  const { plan, phone } = parsed.data
+  const tenantId = req.tenantId!
+
+  if (!isPlanKey(plan)) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, `Unknown plan: ${plan}`)
+  }
+
+  const result = await initiateAirtelSubscriptionPayment(tenantId, plan, phone)
+
+  res.status(202).json({ success: true, data: result })
+})
+
+/**
+ * POST /api/payments/airtel/callback
+ *
+ * Public endpoint — called by Airtel Money servers when a payment completes.
+ * No JWT auth. Security: x-signature header verified before this handler is called
+ * (middleware in the route). Unknown transaction IDs are silently dropped.
+ *
+ * Airtel expects a 200 response quickly or it will retry.
+ */
+export const airtelCallback = asyncHandler(async (req: Request, res: Response) => {
+  const parsed = AirtelCallbackSchema.safeParse(req.body)
+  if (!parsed.success) {
+    logger.warn({
+      event:  'airtel_callback_invalid_payload',
+      errors: parsed.error.errors,
+      body:   req.body,
+    })
+    res.status(200).json({ received: true })
+    return
+  }
+
+  // Respond immediately
+  res.status(200).json({ received: true })
+
+  setImmediate(() => {
+    void handleAirtelCallback(parsed.data as AirtelCallbackPayload).catch((err) => {
+      logger.error({ event: 'airtel_callback_processing_error', err })
     })
   })
 })

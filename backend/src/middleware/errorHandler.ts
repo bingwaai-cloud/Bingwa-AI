@@ -6,7 +6,7 @@ import { logger } from '../utils/logger.js'
  * Global Express error handler. Must be the LAST middleware registered.
  * - Logs full error internally (with tenant context)
  * - Never exposes stack traces or internals to the client
- * - Returns the standard Bingwa error envelope
+ * - Returns the standard Gezi error envelope
  */
 export function errorHandler(
   err: Error,

@@ -1,170 +1,53 @@
 /**
- * Suppliers API — Integration tests
+ * Suppliers API -- Integration tests (row-level tenancy).
  *
- * Requires: DATABASE_URL and JWT_SECRET set in backend/.env
- * Each run creates a disposable tenant schema and drops it on teardown.
+ * Requires: test DATABASE_URL (ideally the non-superuser gezi_app role), with
+ * migrations 004 + 006 applied. Seeds/cleans a disposable tenant via the shared
+ * fixtures, so it is safe to run against the development database.
  */
-
 import request from 'supertest'
-import jwt from 'jsonwebtoken'
-import { Prisma } from '@prisma/client'
-import { createApp } from '../../src/app.js'
-import { db } from '../../src/db.js'
 import type { Express } from 'express'
-
-// ── Fixture IDs ───────────────────────────────────────────────────────────────
+import { createApp } from '../../src/app.js'
+import { db, withTenant } from '../../src/db.js'
+import { createTestTenant, makeToken, seedItem, cleanupTenant, type TestTenant } from '../fixtures/tenant.js'
 
 const TEST_TENANT_ID = 'e5f6a7b8-0000-0000-0000-000000000001'
-const TEST_USER_ID   = 'e5f6a7b8-0000-0000-0000-000000000002'
 const TEST_ITEM_ID   = 'e5f6a7b8-0000-0000-0000-000000000003'
-const TEST_SCHEMA    = `tenant_${TEST_TENANT_ID.replace(/-/g, '_')}`
-
-function makeToken(): string {
-  return jwt.sign(
-    { userId: TEST_USER_ID, tenantId: TEST_TENANT_ID, schemaName: TEST_SCHEMA, role: 'owner' },
-    process.env['JWT_SECRET']!,
-    { expiresIn: '15m', issuer: 'bingwa-ai' }
-  )
-}
-
-// ── DB helpers ────────────────────────────────────────────────────────────────
-
-async function createTenantFixture(): Promise<void> {
-  await db.$executeRaw`
-    INSERT INTO public.tenants
-      (id, "businessName", "ownerName", "ownerPhone", "schemaName", country, currency, "updatedAt")
-    VALUES
-      (${TEST_TENANT_ID}::uuid, 'Supplier Test Shop', 'Tester', '+256700000055',
-       ${TEST_SCHEMA}, 'UG', 'UGX', NOW())
-    ON CONFLICT (id) DO NOTHING
-  `
-
-  await db.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "${TEST_SCHEMA}"`)
-
-  await db.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "${TEST_SCHEMA}".items (
-      id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id           UUID         NOT NULL,
-      name                VARCHAR(255) NOT NULL,
-      name_normalized     VARCHAR(255) NOT NULL,
-      aliases             TEXT[]       NOT NULL DEFAULT '{}',
-      unit                VARCHAR(50)  NOT NULL DEFAULT 'piece',
-      qty_in_stock        INTEGER      NOT NULL DEFAULT 0,
-      low_stock_threshold INTEGER      NOT NULL DEFAULT 5,
-      typical_buy_price   INTEGER,
-      typical_sell_price  INTEGER,
-      created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      deleted_at          TIMESTAMPTZ
-    )
-  `)
-
-  await db.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "${TEST_SCHEMA}".suppliers (
-      id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id            UUID         NOT NULL,
-      platform_supplier_id UUID,
-      name                 VARCHAR(255) NOT NULL,
-      phone                VARCHAR(20),
-      location             VARCHAR(255),
-      items_supplied       TEXT[]       NOT NULL DEFAULT '{}',
-      notes                TEXT,
-      reliability_score    INTEGER      NOT NULL DEFAULT 5,
-      created_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      updated_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      deleted_at           TIMESTAMPTZ
-    )
-  `)
-
-  await db.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "${TEST_SCHEMA}".purchases (
-      id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id      UUID         NOT NULL,
-      item_id        UUID         REFERENCES "${TEST_SCHEMA}".items(id),
-      item_name      VARCHAR(255) NOT NULL,
-      qty            INTEGER      NOT NULL,
-      unit_price     INTEGER      NOT NULL,
-      total_price    INTEGER      NOT NULL,
-      supplier_id    UUID,
-      supplier_name  VARCHAR(255),
-      recorded_by    VARCHAR(20),
-      source         VARCHAR(20)  NOT NULL DEFAULT 'api',
-      notes          TEXT,
-      created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      deleted_at     TIMESTAMPTZ
-    )
-  `)
-
-  await db.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "${TEST_SCHEMA}".price_history (
-      id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id        UUID        NOT NULL,
-      item_id          UUID        REFERENCES "${TEST_SCHEMA}".items(id),
-      transaction_type VARCHAR(10) NOT NULL,
-      unit_price       INTEGER     NOT NULL,
-      total_price      INTEGER     NOT NULL,
-      qty              INTEGER     NOT NULL,
-      recorded_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `)
-
-  await db.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "${TEST_SCHEMA}".audit_log (
-      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id   UUID         NOT NULL,
-      user_phone  VARCHAR(20),
-      action      VARCHAR(100) NOT NULL,
-      entity_type VARCHAR(50),
-      entity_id   UUID,
-      old_value   JSONB,
-      new_value   JSONB,
-      source      VARCHAR(20),
-      created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-    )
-  `)
-
-  // Seed a low-stock item (qty = 2, threshold = 5 → below threshold)
-  await db.$executeRaw`
-    INSERT INTO ${Prisma.raw(`"${TEST_SCHEMA}".items`)}
-      (id, tenant_id, name, name_normalized, unit, qty_in_stock, low_stock_threshold)
-    VALUES
-      (${TEST_ITEM_ID}::uuid, ${TEST_TENANT_ID}::uuid,
-       'Sugar', 'sugar', 'kg', 2, 5)
-    ON CONFLICT (id) DO NOTHING
-  `
-}
-
-async function dropTenantFixture(): Promise<void> {
-  await db.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${TEST_SCHEMA}" CASCADE`)
-  await db.$executeRaw`DELETE FROM public.tenants WHERE id = ${TEST_TENANT_ID}::uuid`
-}
 
 async function resetState(): Promise<void> {
-  await db.$executeRawUnsafe(`DELETE FROM "${TEST_SCHEMA}".suppliers`)
-  await db.$executeRawUnsafe(`DELETE FROM "${TEST_SCHEMA}".purchases`)
-  await db.$executeRawUnsafe(`DELETE FROM "${TEST_SCHEMA}".audit_log`)
-  // Reset item stock to low
-  await db.$executeRaw`
-    UPDATE ${Prisma.raw(`"${TEST_SCHEMA}".items`)}
-    SET qty_in_stock = 2
-    WHERE id = ${TEST_ITEM_ID}::uuid
-  `
+  await withTenant(TEST_TENANT_ID, async (tx) => {
+    await tx.supplier.deleteMany({})
+    await tx.purchase.deleteMany({})
+    await tx.auditLog.deleteMany({})
+    await tx.item.update({
+      where: { id: TEST_ITEM_ID },
+      data: { qtyInStock: 2 },
+    })
+  })
 }
-
-// ── Test suite ────────────────────────────────────────────────────────────────
 
 describe('Suppliers API', () => {
   let app: Express
-  const token = makeToken()
+  let tenant: TestTenant
+  let token: string
 
   beforeAll(async () => {
     app = createApp()
-    await createTenantFixture()
+    await cleanupTenant(TEST_TENANT_ID)
+    tenant = await createTestTenant({ id: TEST_TENANT_ID, ownerPhone: '+256700000055' })
+    token = makeToken(tenant)
+    // Seed a low-stock item (qty = 2, threshold = 5 -> below threshold)
+    await seedItem(TEST_TENANT_ID, {
+      id: TEST_ITEM_ID,
+      name: 'Sugar',
+      unit: 'kg',
+      qtyInStock: 2,
+      lowStockThreshold: 5,
+    })
   })
 
   afterAll(async () => {
-    await dropTenantFixture()
+    await cleanupTenant(TEST_TENANT_ID)
     await db.$disconnect()
   })
 
@@ -223,10 +106,9 @@ describe('Suppliers API', () => {
         .set('Authorization', `Bearer ${token}`)
         .send({ name: 'Audit Supplier' })
 
-      const logs = await db.$queryRaw<{ action: string }[]>`
-        SELECT action FROM ${Prisma.raw(`"${TEST_SCHEMA}".audit_log`)}
-        WHERE action = 'supplier.created' LIMIT 1
-      `
+      const logs = await withTenant(TEST_TENANT_ID, (tx) =>
+        tx.auditLog.findMany({ where: { action: 'supplier.created' }, take: 1 })
+      )
       expect(logs[0]?.action).toBe('supplier.created')
     })
 
@@ -302,7 +184,6 @@ describe('Suppliers API', () => {
 
   describe('GET /api/v1/suppliers/:id/price-history', () => {
     it('returns price history grouped by item from this supplier', async () => {
-      // Create supplier
       const supplierRes = await request(app)
         .post('/api/v1/suppliers')
         .set('Authorization', `Bearer ${token}`)
@@ -310,7 +191,6 @@ describe('Suppliers API', () => {
 
       const supplierId = supplierRes.body.data.id as string
 
-      // Record purchases linked to this supplier
       await request(app)
         .post('/api/v1/purchases')
         .set('Authorization', `Bearer ${token}`)
@@ -343,7 +223,7 @@ describe('Suppliers API', () => {
       expect(res.status).toBe(200)
       expect(res.body.success).toBe(true)
       expect(Array.isArray(res.body.data)).toBe(true)
-      expect(res.body.data.length).toBe(1) // one item: Sugar
+      expect(res.body.data.length).toBe(1)
       const sugarHistory = res.body.data[0]
       expect(sugarHistory.itemName).toBe('Sugar')
       expect(sugarHistory.purchaseCount).toBe(2)
@@ -381,8 +261,6 @@ describe('Suppliers API', () => {
 
   describe('GET /api/v1/suppliers/reorder-suggestions', () => {
     it('returns low-stock items (qty ≤ threshold)', async () => {
-      // Sugar is seeded with qty=2, threshold=5 — should appear
-
       const res = await request(app)
         .get('/api/v1/suppliers/reorder-suggestions')
         .set('Authorization', `Bearer ${token}`)
@@ -400,7 +278,6 @@ describe('Suppliers API', () => {
     })
 
     it('includes last supplier name when a prior purchase exists', async () => {
-      // Create supplier and buy Sugar from them
       const supplierRes = await request(app)
         .post('/api/v1/suppliers')
         .set('Authorization', `Bearer ${token}`)
@@ -421,12 +298,13 @@ describe('Suppliers API', () => {
           supplierName: 'Reorder Supplier',
         })
 
-      // Drain stock back to low (manual reset is simpler)
-      await db.$executeRaw`
-        UPDATE ${Prisma.raw(`"${TEST_SCHEMA}".items`)}
-        SET qty_in_stock = 2
-        WHERE id = ${TEST_ITEM_ID}::uuid
-      `
+      // Reset stock back to low
+      await withTenant(TEST_TENANT_ID, (tx) =>
+        tx.item.update({
+          where: { id: TEST_ITEM_ID },
+          data: { qtyInStock: 2 },
+        })
+      )
 
       const res = await request(app)
         .get('/api/v1/suppliers/reorder-suggestions')

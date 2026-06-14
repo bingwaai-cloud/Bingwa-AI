@@ -1,10 +1,10 @@
-import { Prisma } from '@prisma/client'
-import { db } from '../db.js'
+import type { Prisma } from '@prisma/client'
 
 /**
- * Users live in per-tenant schemas (not in Prisma's global models),
- * so all queries here use Prisma.$queryRaw with explicit schema prefixes.
- * The schemaName parameter is validated by the caller before reaching here.
+ * Users live in the public users table, keyed by tenant_id (row-level tenancy).
+ * Uniqueness is per-tenant: (tenant_id, phone). All functions run on a
+ * tenant-scoped transaction client `tx` from withTenant(), so tenantId is
+ * always required -- a phone is no longer globally unique.
  */
 
 export interface User {
@@ -23,41 +23,11 @@ export interface User {
   deletedAt: Date | null
 }
 
-/** Row shape returned by PostgreSQL (snake_case) mapped to camelCase via aliases */
-type UserRow = {
-  id: string
-  tenantId: string
-  phone: string
-  name: string | null
-  role: 'owner' | 'manager' | 'cashier'
-  passwordHash: string | null
-  refreshTokenHash: string | null
-  refreshTokenExpiresAt: Date | null
-  lastLoginAt: Date | null
-  isActive: boolean
-  createdAt: Date
-  updatedAt: Date
-  deletedAt: Date | null
-}
-
-const USER_SELECT = `
-  id::text,
-  tenant_id::text          AS "tenantId",
-  phone,
-  name,
-  role,
-  password_hash            AS "passwordHash",
-  refresh_token_hash       AS "refreshTokenHash",
-  refresh_token_expires_at AS "refreshTokenExpiresAt",
-  last_login_at            AS "lastLoginAt",
-  is_active                AS "isActive",
-  created_at               AS "createdAt",
-  updated_at               AS "updatedAt",
-  deleted_at               AS "deletedAt"
-`
+type UserDbRow = Omit<User, 'role'> & { role: string }
+const mapUser = (r: UserDbRow): User => ({ ...r, role: r.role as User['role'] })
 
 export async function createUser(
-  schemaName: string,
+  tx: Prisma.TransactionClient,
   data: {
     tenantId: string
     phone: string
@@ -66,85 +36,80 @@ export async function createUser(
     passwordHash?: string
   }
 ): Promise<User> {
-  const rows = await db.$queryRaw<UserRow[]>`
-    INSERT INTO ${Prisma.raw(`"${schemaName}".users`)}
-      (tenant_id, phone, name, role, password_hash)
-    VALUES
-      (${data.tenantId}::uuid, ${data.phone}, ${data.name ?? null}, ${data.role}, ${data.passwordHash ?? null})
-    RETURNING ${Prisma.raw(USER_SELECT)}
-  `
-  const row = rows[0]
-  if (!row) throw new Error('User insert returned no rows')
-  return row
+  const row = await tx.user.create({
+    data: {
+      tenantId: data.tenantId,
+      phone: data.phone,
+      name: data.name ?? null,
+      role: data.role,
+      passwordHash: data.passwordHash ?? null,
+    },
+  })
+  return mapUser(row)
 }
 
-export async function findUserByPhone(schemaName: string, phone: string): Promise<User | null> {
-  const rows = await db.$queryRaw<UserRow[]>`
-    SELECT ${Prisma.raw(USER_SELECT)}
-    FROM   ${Prisma.raw(`"${schemaName}".users`)}
-    WHERE  phone = ${phone}
-    AND    deleted_at IS NULL
-    LIMIT  1
-  `
-  return rows[0] ?? null
+export async function findUserByPhone(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  phone: string
+): Promise<User | null> {
+  const row = await tx.user.findFirst({ where: { tenantId, phone, deletedAt: null } })
+  return row ? mapUser(row) : null
 }
 
-export async function findUserById(schemaName: string, id: string): Promise<User | null> {
-  const rows = await db.$queryRaw<UserRow[]>`
-    SELECT ${Prisma.raw(USER_SELECT)}
-    FROM   ${Prisma.raw(`"${schemaName}".users`)}
-    WHERE  id = ${id}::uuid
-    AND    deleted_at IS NULL
-    LIMIT  1
-  `
-  return rows[0] ?? null
+export async function findUserById(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  id: string
+): Promise<User | null> {
+  const row = await tx.user.findFirst({ where: { id, tenantId, deletedAt: null } })
+  return row ? mapUser(row) : null
 }
 
 export async function setRefreshToken(
-  schemaName: string,
+  tx: Prisma.TransactionClient,
+  tenantId: string,
   userId: string,
   tokenHash: string,
   expiresAt: Date
 ): Promise<void> {
-  await db.$executeRaw`
-    UPDATE ${Prisma.raw(`"${schemaName}".users`)}
-    SET    refresh_token_hash       = ${tokenHash},
-           refresh_token_expires_at = ${expiresAt},
-           updated_at               = NOW()
-    WHERE  id = ${userId}::uuid
-  `
+  await tx.user.updateMany({
+    where: { id: userId, tenantId },
+    data: { refreshTokenHash: tokenHash, refreshTokenExpiresAt: expiresAt },
+  })
 }
 
-export async function clearRefreshToken(schemaName: string, userId: string): Promise<void> {
-  await db.$executeRaw`
-    UPDATE ${Prisma.raw(`"${schemaName}".users`)}
-    SET    refresh_token_hash       = NULL,
-           refresh_token_expires_at = NULL,
-           updated_at               = NOW()
-    WHERE  id = ${userId}::uuid
-  `
+export async function clearRefreshToken(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  userId: string
+): Promise<void> {
+  await tx.user.updateMany({
+    where: { id: userId, tenantId },
+    data: { refreshTokenHash: null, refreshTokenExpiresAt: null },
+  })
 }
 
-export async function touchLastLogin(schemaName: string, userId: string): Promise<void> {
-  await db.$executeRaw`
-    UPDATE ${Prisma.raw(`"${schemaName}".users`)}
-    SET    last_login_at = NOW(),
-           updated_at   = NOW()
-    WHERE  id = ${userId}::uuid
-  `
+export async function touchLastLogin(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  userId: string
+): Promise<void> {
+  await tx.user.updateMany({ where: { id: userId, tenantId }, data: { lastLoginAt: new Date() } })
 }
 
 export async function findUserByRefreshTokenHash(
-  schemaName: string,
+  tx: Prisma.TransactionClient,
+  tenantId: string,
   tokenHash: string
 ): Promise<User | null> {
-  const rows = await db.$queryRaw<UserRow[]>`
-    SELECT ${Prisma.raw(USER_SELECT)}
-    FROM   ${Prisma.raw(`"${schemaName}".users`)}
-    WHERE  refresh_token_hash       = ${tokenHash}
-    AND    refresh_token_expires_at > NOW()
-    AND    deleted_at               IS NULL
-    LIMIT  1
-  `
-  return rows[0] ?? null
+  const row = await tx.user.findFirst({
+    where: {
+      tenantId,
+      refreshTokenHash: tokenHash,
+      refreshTokenExpiresAt: { gt: new Date() },
+      deletedAt: null,
+    },
+  })
+  return row ? mapUser(row) : null
 }

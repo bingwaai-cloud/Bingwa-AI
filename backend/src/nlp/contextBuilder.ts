@@ -23,7 +23,7 @@ export function buildSystemPrompt(context: UserContext): string {
           .map((i) => `${i.role === 'user' ? 'User' : 'Bot'}: ${i.content}`)
           .join('\n')
 
-  return `You are the Bingwa AI intent parser for ${tenant.businessName}, a business in Uganda.
+  return `You are the Gezi AI intent parser for ${tenant.businessName}, a business in Uganda.
 
 YOUR ONLY JOB: Parse the user's WhatsApp message and return a single JSON object. No other text. No markdown. No explanation.
 

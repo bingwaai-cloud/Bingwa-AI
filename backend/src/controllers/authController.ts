@@ -101,11 +101,11 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
  * Revokes the refresh token. Requires a valid access token.
  */
 export const logout = asyncHandler(async (req: Request, res: Response) => {
-  if (!req.user || !req.tenantId || !req.schemaName) {
+  if (!req.user || !req.tenantId) {
     throw new AppError(ErrorCodes.UNAUTHORIZED, 'Not authenticated.', 401)
   }
 
-  await authService.logout(req.tenantId, req.schemaName, req.user.userId)
+  await authService.logout(req.tenantId, req.user.userId)
 
   res.status(200).json({ success: true, data: { message: 'Logged out successfully.' } })
 })

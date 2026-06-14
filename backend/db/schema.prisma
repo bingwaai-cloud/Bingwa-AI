@@ -84,3 +84,225 @@ model PlatformSupplier {
 
   @@map("platform_suppliers")
 }
+
+// ─── Per-tenant tables (row-level multi-tenancy — P0-1) ─────────────────────
+// Consolidated out of the per-tenant tenant_{uuid} schemas into the public
+// schema, keyed by tenantId. DDL source of truth: db/migrations/004_consolidate_tenants.sql.
+// tenantId is a scalar (no Tenant relation) by design: tenant scoping is enforced
+// by withTenant()/RLS, not by ORM navigation. FK to tenants(id) is declared in 004 SQL.
+
+model Item {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  name              String    @db.VarChar(255)
+  nameNormalized    String    @map("name_normalized") @db.VarChar(255)
+  aliases           String[]
+  unit              String    @default("piece") @db.VarChar(50)
+  qtyInStock        Int       @default(0) @map("qty_in_stock")
+  lowStockThreshold Int       @default(5) @map("low_stock_threshold")
+  typicalBuyPrice   Int?      @map("typical_buy_price")
+  typicalSellPrice  Int?      @map("typical_sell_price")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz()
+
+  @@index([tenantId, nameNormalized])
+  @@index([tenantId, createdAt])
+  @@map("items")
+}
+
+model Sale {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  itemId      String?   @map("item_id") @db.Uuid
+  itemName    String    @map("item_name") @db.VarChar(255)
+  qty         Int
+  unitPrice   Int       @map("unit_price")
+  totalPrice  Int       @map("total_price")
+  customerId  String?   @map("customer_id") @db.Uuid
+  recordedBy  String?   @map("recorded_by") @db.VarChar(20)
+  source      String    @default("whatsapp") @db.VarChar(20)
+  notes       String?
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz()
+
+  @@index([tenantId, createdAt])
+  @@index([itemId])
+  @@index([customerId])
+  @@map("sales")
+}
+
+model Purchase {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  itemId       String?   @map("item_id") @db.Uuid
+  itemName     String    @map("item_name") @db.VarChar(255)
+  qty          Int
+  unitPrice    Int       @map("unit_price")
+  totalPrice   Int       @map("total_price")
+  supplierId   String?   @map("supplier_id") @db.Uuid
+  supplierName String?   @map("supplier_name") @db.VarChar(255)
+  recordedBy   String?   @map("recorded_by") @db.VarChar(20)
+  source       String    @default("whatsapp") @db.VarChar(20)
+  notes        String?
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz()
+
+  @@index([tenantId, createdAt])
+  @@index([itemId])
+  @@index([supplierId])
+  @@map("purchases")
+}
+
+model PriceHistory {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  itemId          String?  @map("item_id") @db.Uuid
+  transactionType String   @map("transaction_type") @db.VarChar(10)
+  unitPrice       Int      @map("unit_price")
+  totalPrice      Int      @map("total_price")
+  qty             Int
+  recordedAt      DateTime @default(now()) @map("recorded_at") @db.Timestamptz()
+
+  @@index([itemId, recordedAt])
+  @@index([tenantId, recordedAt])
+  @@map("price_history")
+}
+
+model Supplier {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  platformSupplierId String?   @map("platform_supplier_id") @db.Uuid
+  name               String    @db.VarChar(255)
+  phone              String?   @db.VarChar(20)
+  location           String?   @db.VarChar(255)
+  itemsSupplied      String[]  @map("items_supplied")
+  notes              String?
+  reliabilityScore   Int       @default(5) @map("reliability_score")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz()
+
+  @@index([tenantId])
+  @@index([platformSupplierId])
+  @@map("suppliers")
+}
+
+model Customer {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  phone             String?   @db.VarChar(20)
+  name              String?   @db.VarChar(255)
+  totalPurchases    Int       @default(0) @map("total_purchases")
+  visitCount        Int       @default(0) @map("visit_count")
+  lastVisitedAt     DateTime? @map("last_visited_at") @db.Timestamptz()
+  optedInMarketing  Boolean   @default(true) @map("opted_in_marketing")
+  notes             String?
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz()
+
+  @@index([tenantId, phone])
+  @@map("customers")
+}
+
+model Expense {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  name        String    @db.VarChar(255)
+  amountUgx   Int       @map("amount_ugx")
+  frequency   String    @default("monthly") @db.VarChar(20)
+  dueDay      Int?      @map("due_day")
+  lastPaidAt  DateTime? @map("last_paid_at") @db.Timestamptz()
+  nextDueAt   DateTime? @map("next_due_at") @db.Timestamptz()
+  notes       String?
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@index([tenantId, createdAt])
+  @@map("expenses")
+}
+
+model UserContext {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  userPhone          String   @map("user_phone") @db.VarChar(20)
+  interactionLog     Json     @default("[]") @map("interaction_log")
+  onboardingStep     Int      @default(0) @map("onboarding_step")
+  onboardingComplete Boolean  @default(false) @map("onboarding_complete")
+  preferences        Json     @default("{}")
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@unique([tenantId, userPhone])
+  @@index([tenantId, userPhone])
+  @@map("user_context")
+}
+
+model Receipt {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  receiptNumber Int      @default(autoincrement()) @map("receipt_number")
+  saleId        String?  @map("sale_id") @db.Uuid
+  customerId    String?  @map("customer_id") @db.Uuid
+  items         Json
+  totalUgx      Int      @map("total_ugx")
+  cashReceived  Int?     @map("cash_received")
+  changeGiven   Int?     @map("change_given")
+  printed       Boolean  @default(false)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([tenantId, createdAt])
+  @@index([saleId])
+  @@map("receipts")
+}
+
+model MarketingBroadcast {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  message   String
+  sentTo    Int       @default(0) @map("sent_to")
+  delivered Int       @default(0)
+  sentAt    DateTime? @map("sent_at") @db.Timestamptz()
+  createdBy String?   @map("created_by") @db.VarChar(20)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([tenantId, createdAt])
+  @@map("marketing_broadcasts")
+}
+
+model AuditLog {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  userPhone  String?  @map("user_phone") @db.VarChar(20)
+  action     String   @db.VarChar(100)
+  entityType String?  @map("entity_type") @db.VarChar(50)
+  entityId   String?  @map("entity_id") @db.Uuid
+  oldValue   Json?    @map("old_value")
+  newValue   Json?    @map("new_value")
+  source     String?  @db.VarChar(20)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([tenantId, createdAt])
+  @@map("audit_log")
+}
+
+model User {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId              String    @map("tenant_id") @db.Uuid
+  phone                 String    @db.VarChar(20)
+  name                  String?   @db.VarChar(255)
+  role                  String    @default("cashier") @db.VarChar(20)
+  passwordHash          String?   @map("password_hash") @db.VarChar(255)
+  refreshTokenHash      String?   @map("refresh_token_hash") @db.VarChar(500)
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamptz()
+  lastLoginAt           DateTime? @map("last_login_at") @db.Timestamptz()
+  isActive              Boolean   @default(true) @map("is_active")
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt             DateTime? @map("deleted_at") @db.Timestamptz()
+
+  @@index([tenantId])
+  @@map("users")
+}

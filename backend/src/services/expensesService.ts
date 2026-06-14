@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger.js'
+import { withTenant } from '../db.js'
 import {
   findExpenseByName,
   createExpense,
@@ -6,6 +7,7 @@ import {
   findExpenses,
   type Expense,
 } from '../repositories/expensesRepository.js'
+import { insertAuditLog } from '../utils/audit.js'
 
 export type { Expense }
 
@@ -21,69 +23,56 @@ export interface ExpenseResult {
 }
 
 /**
- * Record an expense payment.
- *
- * If this expense name already exists for the tenant → update last_paid_at + amount.
- * If it's a new expense name → create it as a recurring expense and record first payment.
- *
- * Returns the expense record and whether it was newly created.
+ * Record an expense payment. Existing name -> update; new name -> create.
+ * Audit log INSERT is inside the same withTenant transaction — fails together.
  */
 export async function recordExpense(
   tenantId: string,
-  schemaName: string,
   params: RecordExpenseParams
 ): Promise<ExpenseResult> {
   const normalizedName = params.name.trim()
 
-  // Check if this expense already exists
-  const existing = await findExpenseByName(schemaName, tenantId, normalizedName)
+  return withTenant(tenantId, async (tx) => {
+    const existing = await findExpenseByName(tx, tenantId, normalizedName)
 
-  if (existing) {
-    // Record payment against existing expense
-    const updated = await recordExpensePayment(
-      schemaName,
-      tenantId,
-      existing.id,
-      params.amountUgx
-    )
+    if (existing) {
+      const updated = await recordExpensePayment(tx, tenantId, existing.id, params.amountUgx)
+      logger.info({ event: 'expense_payment_recorded', tenantId, expenseId: existing.id, name: normalizedName, amount: params.amountUgx })
 
-    logger.info({
-      event:     'expense_payment_recorded',
+      await insertAuditLog(tx, {
+        tenantId,
+        action: 'expense.payment_recorded',
+        entityType: 'expense',
+        entityId: existing.id,
+        newValue: { amountUgx: params.amountUgx },
+        source: 'api',
+      })
+
+      return { expense: updated ?? existing, isNew: false }
+    }
+
+    const expense = await createExpense(tx, {
       tenantId,
-      expenseId: existing.id,
-      name:      normalizedName,
-      amount:    params.amountUgx,
+      name: normalizedName,
+      amountUgx: params.amountUgx,
+      frequency: 'monthly',
+      notes: params.notes ?? null,
+    })
+    logger.info({ event: 'expense_created', tenantId, expenseId: expense.id, name: normalizedName, amount: params.amountUgx })
+
+    await insertAuditLog(tx, {
+      tenantId,
+      action: 'expense.created',
+      entityType: 'expense',
+      entityId: expense.id,
+      newValue: { name: normalizedName, amountUgx: params.amountUgx },
+      source: 'api',
     })
 
-    return { expense: updated ?? existing, isNew: false }
-  }
-
-  // Create a new recurring expense
-  const expense = await createExpense(schemaName, {
-    tenantId,
-    name:      normalizedName,
-    amountUgx: params.amountUgx,
-    frequency: 'monthly', // default — owner can update via web dashboard later
-    notes:     params.notes ?? null,
+    return { expense, isNew: true }
   })
-
-  logger.info({
-    event:     'expense_created',
-    tenantId,
-    expenseId: expense.id,
-    name:      normalizedName,
-    amount:    params.amountUgx,
-  })
-
-  return { expense, isNew: true }
 }
 
-/**
- * List all recurring expenses for a tenant.
- */
-export async function listExpenses(
-  tenantId: string,
-  schemaName: string
-): Promise<Expense[]> {
-  return findExpenses(schemaName, tenantId)
+export async function listExpenses(tenantId: string): Promise<Expense[]> {
+  return withTenant(tenantId, (tx) => findExpenses(tx, tenantId))
 }

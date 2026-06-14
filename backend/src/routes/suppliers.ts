@@ -5,6 +5,7 @@ import {
   handleGetSupplier,
   handleGetSupplierPriceHistory,
   handleGetReorderSuggestions,
+  handlePlatformSearch,
 } from '../controllers/suppliersController.js'
 
 /**
@@ -18,6 +19,9 @@ export const suppliersRouter = Router()
 
 // GET  /api/v1/suppliers/reorder-suggestions  — low-stock items + last supplier
 suppliersRouter.get('/reorder-suggestions', handleGetReorderSuggestions)
+
+// POST /api/v1/suppliers/platform/search      — search shared platform directory
+suppliersRouter.get('/platform/search', handlePlatformSearch)
 
 // GET  /api/v1/suppliers                      — paginated supplier list
 suppliersRouter.get('/', handleListSuppliers)

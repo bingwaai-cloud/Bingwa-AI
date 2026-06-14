@@ -9,6 +9,7 @@ import { suppliersRouter } from './suppliers.js'
 import { paymentsRouter, paymentCallbackRouter } from './payments.js'
 import { customersRouter } from './customers.js'
 import { marketingRouter } from './marketing.js'
+import { ordersRouter } from './orders.js'
 import { authenticate } from '../middleware/auth.js'
 import { tenantMiddleware } from '../middleware/tenant.js'
 
@@ -34,7 +35,9 @@ apiRouter.use('/', healthRouter)
 apiRouter.use('/', webhookRouter)
 apiRouter.use('/v1/auth', authRouter)
 
-// MTN MoMo callback — public, no JWT (MTN cannot authenticate with JWT)
+// Payment provider callbacks — public, no JWT
+// MTN MoMo:    POST /api/payments/callback
+// Airtel Money: POST /api/payments/airtel/callback
 apiRouter.use('/payments', paymentCallbackRouter)
 
 // ─── Authenticated + tenant-scoped routes ────────────────────────────────────
@@ -46,6 +49,7 @@ apiRouter.use('/v1/suppliers',  authenticate, tenantMiddleware, suppliersRouter)
 apiRouter.use('/v1/payments',   authenticate, tenantMiddleware, paymentsRouter)
 apiRouter.use('/v1/customers',  authenticate, tenantMiddleware, customersRouter)
 apiRouter.use('/v1/marketing',  authenticate, tenantMiddleware, marketingRouter)
+apiRouter.use('/v1/orders',     authenticate, tenantMiddleware, ordersRouter)
 
 // Export middleware for use in future module routes
 export { authenticate, tenantMiddleware }

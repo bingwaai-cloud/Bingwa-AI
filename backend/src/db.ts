@@ -1,11 +1,12 @@
 import { Prisma, PrismaClient } from '@prisma/client'
 import { logger } from './utils/logger.js'
+import { AppError, ErrorCodes } from './utils/AppError.js'
 
 // Prisma v5 requires explicit type params to use $on for events
 type LogEvents = 'error' | 'warn'
 type PrismaWithEvents = PrismaClient<Prisma.PrismaClientOptions, LogEvents>
 
-// Singleton — one PrismaClient for the whole process.
+// Singleton -- one PrismaClient for the whole process.
 // In development, avoid spawning a new client on every hot reload.
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaWithEvents }
 
@@ -46,4 +47,40 @@ db.$on('warn', (e) => {
 
 if (process.env['NODE_ENV'] !== 'production') {
   globalForPrisma.prisma = db
+}
+
+// --- Row-level tenancy context (P0-1) ---------------------------------------
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Run `fn` inside a transaction with the Postgres session variable
+ * `app.tenant_id` set for the life of that transaction. The RLS policies
+ * (migration 006) read it via current_setting('app.tenant_id')::uuid, so every
+ * query inside `fn` is automatically scoped to this tenant -- a second
+ * enforcement layer behind the application-level tenant filter.
+ *
+ * Why this shape (see .claude/rules/multi-tenant.md):
+ *   - set_config(..., is_local = true) is the function form of SET LOCAL:
+ *     transaction-scoped, so it resets automatically and CANNOT leak across
+ *     pooled connections (the failure mode of the old SET search_path).
+ *   - The value is passed as a bound parameter via a tagged-template
+ *     $executeRaw -- bound parameter, never string-interpolated.
+ *
+ * Always pass the transaction client `tx` down to repositories; queries made on
+ * the global `db` inside `fn` would run OUTSIDE this transaction and therefore
+ * WITHOUT the tenant context (RLS would return zero rows).
+ */
+export async function withTenant<T>(
+  tenantId: string,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>
+): Promise<T> {
+  if (!tenantId || !UUID_RE.test(tenantId)) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid tenant id', 400)
+  }
+  return db.$transaction(async (tx) => {
+    // set_config(setting, value, is_local) -- is_local=true => SET LOCAL semantics.
+    // tenantId is bound as $1; the cast to ::uuid happens in the RLS policy.
+    await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
+    return fn(tx)
+  })
 }

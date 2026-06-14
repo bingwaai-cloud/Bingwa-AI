@@ -1,10 +1,10 @@
-import { Prisma } from '@prisma/client'
-import { db } from '../db.js'
+import type { Prisma } from '@prisma/client'
 import type { Interaction } from '../nlp/types.js'
 
 /**
- * User context lives in the per-tenant schema's user_context table.
- * It stores per-user state: interaction history, onboarding progress, preferences.
+ * User context lives in the public user_context table, keyed by tenant_id.
+ * Per-user NLP state: interaction history, onboarding progress, preferences.
+ * All functions run on a tenant-scoped transaction client `tx` from withTenant().
  */
 
 export interface UserContextRecord {
@@ -18,103 +18,70 @@ export interface UserContextRecord {
   updatedAt: Date
 }
 
-type UserContextRow = {
+const MAX_INTERACTIONS = 20
+
+type UserContextDbRow = {
   id: string
   tenantId: string
   userPhone: string
-  interactionLog: Interaction[]
+  interactionLog: Prisma.JsonValue
   onboardingStep: number
   onboardingComplete: boolean
-  preferences: Record<string, unknown>
+  preferences: Prisma.JsonValue
   updatedAt: Date
 }
 
-const MAX_INTERACTIONS = 20
+function mapRow(row: UserContextDbRow): UserContextRecord {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    userPhone: row.userPhone,
+    interactionLog: (row.interactionLog as unknown as Interaction[]) ?? [],
+    onboardingStep: row.onboardingStep,
+    onboardingComplete: row.onboardingComplete,
+    preferences: (row.preferences as Record<string, unknown>) ?? {},
+    updatedAt: row.updatedAt,
+  }
+}
 
-/**
- * Get the user context record, or null if it does not exist yet.
- */
 export async function findUserContext(
-  schemaName: string,
+  tx: Prisma.TransactionClient,
   tenantId: string,
   userPhone: string
 ): Promise<UserContextRecord | null> {
-  const rows = await db.$queryRaw<UserContextRow[]>`
-    SELECT
-      id::text,
-      tenant_id::text         AS "tenantId",
-      user_phone              AS "userPhone",
-      interaction_log         AS "interactionLog",
-      onboarding_step         AS "onboardingStep",
-      onboarding_complete     AS "onboardingComplete",
-      preferences,
-      updated_at              AS "updatedAt"
-    FROM ${Prisma.raw(`"${schemaName}".user_context`)}
-    WHERE tenant_id = ${tenantId}::uuid
-    AND   user_phone = ${userPhone}
-    LIMIT 1
-  `
-  return rows[0] ?? null
+  const row = await tx.userContext.findFirst({ where: { tenantId, userPhone } })
+  return row ? mapRow(row) : null
 }
 
-/**
- * Upsert user context — creates it on first message, updates on subsequent ones.
- */
 export async function upsertUserContext(
-  schemaName: string,
+  tx: Prisma.TransactionClient,
   tenantId: string,
   userPhone: string
 ): Promise<UserContextRecord> {
-  const rows = await db.$queryRaw<UserContextRow[]>`
-    INSERT INTO ${Prisma.raw(`"${schemaName}".user_context`)}
-      (tenant_id, user_phone)
-    VALUES
-      (${tenantId}::uuid, ${userPhone})
-    ON CONFLICT (tenant_id, user_phone) DO UPDATE
-      SET updated_at = NOW()
-    RETURNING
-      id::text,
-      tenant_id::text         AS "tenantId",
-      user_phone              AS "userPhone",
-      interaction_log         AS "interactionLog",
-      onboarding_step         AS "onboardingStep",
-      onboarding_complete     AS "onboardingComplete",
-      preferences,
-      updated_at              AS "updatedAt"
-  `
-  const row = rows[0]
-  if (!row) throw new Error('userContext upsert returned no rows')
-  return row
+  const row = await tx.userContext.upsert({
+    where: { tenantId_userPhone: { tenantId, userPhone } },
+    create: { tenantId, userPhone },
+    update: { updatedAt: new Date() },
+  })
+  return mapRow(row)
 }
 
-/**
- * Append a new interaction to the log, keeping only the last MAX_INTERACTIONS entries.
- * Uses application-level capping (simpler than SQL window functions on JSONB).
- */
 export async function appendInteraction(
-  schemaName: string,
+  tx: Prisma.TransactionClient,
   tenantId: string,
   userPhone: string,
   interaction: Interaction,
   currentLog: Interaction[]
 ): Promise<void> {
   const updated = [...currentLog, interaction].slice(-MAX_INTERACTIONS)
-  const logJson = JSON.stringify(updated)
-
-  await db.$executeRaw`
-    UPDATE ${Prisma.raw(`"${schemaName}".user_context`)}
-    SET interaction_log = ${logJson}::jsonb,
-        updated_at      = NOW()
-    WHERE tenant_id = ${tenantId}::uuid
-    AND   user_phone = ${userPhone}
-  `
+  await tx.userContext.updateMany({
+    where: { tenantId, userPhone },
+    data: { interactionLog: updated as unknown as Prisma.InputJsonValue },
+  })
 }
 
-/**
- * Save both user and assistant turns after a completed interaction.
- */
 export async function saveInteractionPair(
-  schemaName: string,
+  tx: Prisma.TransactionClient,
   tenantId: string,
   userPhone: string,
   userMessage: string,
@@ -123,40 +90,26 @@ export async function saveInteractionPair(
   currentLog: Interaction[]
 ): Promise<void> {
   const now = new Date().toISOString()
-
   const newInteractions: Interaction[] = [
     { role: 'user', content: userMessage, timestamp: now, action },
     { role: 'assistant', content: botReply, timestamp: now, action },
   ]
-
   const updated = [...currentLog, ...newInteractions].slice(-MAX_INTERACTIONS)
-  const logJson = JSON.stringify(updated)
-
-  await db.$executeRaw`
-    UPDATE ${Prisma.raw(`"${schemaName}".user_context`)}
-    SET interaction_log = ${logJson}::jsonb,
-        updated_at      = NOW()
-    WHERE tenant_id = ${tenantId}::uuid
-    AND   user_phone = ${userPhone}
-  `
+  await tx.userContext.updateMany({
+    where: { tenantId, userPhone },
+    data: { interactionLog: updated as unknown as Prisma.InputJsonValue },
+  })
 }
 
-/**
- * Update onboarding progress.
- */
 export async function updateOnboardingStep(
-  schemaName: string,
+  tx: Prisma.TransactionClient,
   tenantId: string,
   userPhone: string,
   step: number,
   complete: boolean
 ): Promise<void> {
-  await db.$executeRaw`
-    UPDATE ${Prisma.raw(`"${schemaName}".user_context`)}
-    SET onboarding_step     = ${step},
-        onboarding_complete = ${complete},
-        updated_at          = NOW()
-    WHERE tenant_id = ${tenantId}::uuid
-    AND   user_phone = ${userPhone}
-  `
+  await tx.userContext.updateMany({
+    where: { tenantId, userPhone },
+    data: { onboardingStep: step, onboardingComplete: complete },
+  })
 }
