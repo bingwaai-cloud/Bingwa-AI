@@ -1,6 +1,7 @@
 import type { DraftTransaction, Prisma } from '@prisma/client'
 import { withTenant } from '../db.js'
 import { normalizeCurrency } from '../nlp/normalizers.js'
+import { enrichMatchedItems, recordAliasMatch } from '../nlp/itemMatcher.js'
 import type { ParsedIntent } from '../nlp/types.js'
 import {
   createDraft as insertDraft,
@@ -205,6 +206,29 @@ async function commitConfirmedDraft(
 ): Promise<DraftCommitResult> {
   assertTransition(draft.state as DraftState, 'committed')
 
+  // Enrich unmatched items with async full matcher (tenant alias table + pg_trgm).
+  if (draft.action === 'sale' || draft.action === 'purchase') {
+    const dbItems = await tx.item.findMany({
+      where: { tenantId, deletedAt: null },
+    })
+    const inventoryItems = dbItems.map((i) => ({
+      id: i.id,
+      name: i.name,
+      nameNormalized: i.nameNormalized,
+      aliases: i.aliases,
+      unit: i.unit,
+      qtyInStock: i.qtyInStock,
+      lowStockThreshold: i.lowStockThreshold,
+      typicalBuyPrice: i.typicalBuyPrice,
+      typicalSellPrice: i.typicalSellPrice,
+    }))
+    // Payload items have the same shape as ParsedLineItem
+    const payloadItems = payload['items']
+    if (Array.isArray(payloadItems)) {
+      await enrichMatchedItems(payloadItems as Array<{ itemNormalized: string | null; matchedItemId: string | null }>, inventoryItems, tenantId, tx)
+    }
+  }
+
   let committedEntityType: DraftCommitResult['committedEntityType']
   let committedEntityId: string
 
@@ -279,6 +303,18 @@ async function commitConfirmedDraft(
     committedEntityId,
   })
   if (!committed) throw new AppError(ErrorCodes.DRAFT_NOT_FOUND, 'Draft not found', 404)
+
+  // Learning loop: record confirmed item aliases for this tenant.
+  const payloadItems = payload['items']
+  if (Array.isArray(payloadItems)) {
+    for (const line of payloadItems as Array<Record<string, unknown>>) {
+      const matchedItemId = asOptionalString(line['matchedItemId'])
+      const itemNormalized = asOptionalString(line['itemNormalized'])
+      if (matchedItemId && itemNormalized) {
+        await recordAliasMatch(tenantId, itemNormalized, matchedItemId, tx)
+      }
+    }
+  }
 
   return { draft: committed, committedEntityType, committedEntityId }
 }

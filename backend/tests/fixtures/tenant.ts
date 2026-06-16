@@ -99,6 +99,8 @@ export async function cleanupTenant(tenantId: string): Promise<void> {
     await tx.customer.deleteMany({})
     await tx.supplier.deleteMany({})
     await tx.user.deleteMany({})
+    // FK: item_aliases → items, must delete before items
+    await tx.itemAlias.deleteMany({})
     await tx.item.deleteMany({})
   })
   // Global tables with FK to tenants (not RLS-scoped).

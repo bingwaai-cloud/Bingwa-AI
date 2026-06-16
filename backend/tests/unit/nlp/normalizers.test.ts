@@ -1,4 +1,4 @@
-import { matchItem } from '../../../src/nlp/normalizers.js'
+import { matchItemSync } from '../../../src/nlp/itemMatcher.js'
 import type { InventoryItem } from '../../../src/nlp/types.js'
 
 const INVENTORY: InventoryItem[] = [
@@ -37,54 +37,54 @@ const INVENTORY: InventoryItem[] = [
   },
 ]
 
-describe('matchItem', () => {
+describe('matchItem (sync)', () => {
   test('exact nameNormalized match', () => {
-    const result = matchItem('sugar', INVENTORY)
+    const result = matchItemSync('sugar', INVENTORY)
     expect(result?.id).toBe('1')
   })
 
   test('case-insensitive exact match', () => {
-    const result = matchItem('Sugar', INVENTORY)
+    const result = matchItemSync('Sugar', INVENTORY)
     expect(result?.id).toBe('1')
   })
 
   test('alias match — sukari → sugar', () => {
-    const result = matchItem('sukari', INVENTORY)
+    const result = matchItemSync('sukari', INVENTORY)
     expect(result?.id).toBe('1')
   })
 
   test('alias match — unga → maize flour', () => {
-    const result = matchItem('unga', INVENTORY)
+    const result = matchItemSync('unga', INVENTORY)
     expect(result?.id).toBe('2')
   })
 
   test('alias match — posho → maize flour', () => {
-    const result = matchItem('posho', INVENTORY)
+    const result = matchItemSync('posho', INVENTORY)
     expect(result?.id).toBe('2')
   })
 
-  test('partial match — "maize" matches "maize flour"', () => {
-    const result = matchItem('maize', INVENTORY)
-    expect(result?.id).toBe('2')
+  test('substring "maize" does NOT match "maize flour" (no substring matching)', () => {
+    const result = matchItemSync('maize', INVENTORY)
+    expect(result).toBeNull()
   })
 
-  test('partial match — query contains item name', () => {
-    const result = matchItem('gumboots pair', INVENTORY)
-    expect(result?.id).toBe('3')
+  test('partial query "gumboots pair" does NOT match "gumboots" (no contains matching)', () => {
+    const result = matchItemSync('gumboots pair', INVENTORY)
+    expect(result).toBeNull()
   })
 
   test('returns null for completely unknown item', () => {
-    const result = matchItem('laptop', INVENTORY)
+    const result = matchItemSync('laptop', INVENTORY)
     expect(result).toBeNull()
   })
 
   test('returns null for empty string', () => {
-    const result = matchItem('', INVENTORY)
+    const result = matchItemSync('', INVENTORY)
     expect(result).toBeNull()
   })
 
   test('returns null when inventory is empty', () => {
-    const result = matchItem('sugar', [])
+    const result = matchItemSync('sugar', [])
     expect(result).toBeNull()
   })
 })

@@ -1,5 +1,3 @@
-import type { InventoryItem } from './types.js'
-
 /**
  * Normalize a currency string into an integer UGX amount.
  *
@@ -57,29 +55,4 @@ export function formatUGXShort(amount: number): string {
   return String(amount)
 }
 
-/**
- * Find an item in the inventory by exact name, alias, or partial match.
- * Returns the first match, or null if none found.
- */
-export function matchItem(input: string, inventory: InventoryItem[]): InventoryItem | null {
-  if (!input) return null
 
-  const normalized = input.toLowerCase().trim()
-
-  // 1. Exact nameNormalized match
-  const exactMatch = inventory.find((i) => i.nameNormalized === normalized)
-  if (exactMatch) return exactMatch
-
-  // 2. Alias exact match
-  const aliasMatch = inventory.find((i) =>
-    i.aliases.some((a) => a.toLowerCase() === normalized)
-  )
-  if (aliasMatch) return aliasMatch
-
-  // 3. Partial match — item name contains query or vice-versa
-  const partialMatch = inventory.find(
-    (i) =>
-      i.nameNormalized.includes(normalized) || normalized.includes(i.nameNormalized)
-  )
-  return partialMatch ?? null
-}

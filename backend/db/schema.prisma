@@ -328,6 +328,21 @@ model User {
   @@map("users")
 }
 
+model ItemAlias {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  alias          String    @db.Text
+  itemId         String    @map("item_id") @db.Uuid
+  confirmedCount Int       @default(1) @map("confirmed_count")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz()
+
+  @@index([tenantId, alias])
+  @@index([itemId])
+  @@map("item_aliases")
+}
+
 model DraftTransaction {
   id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId              String    @map("tenant_id") @db.Uuid

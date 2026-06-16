@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { logger } from '../utils/logger.js'
 import { buildSystemPrompt } from './contextBuilder.js'
 import { normalizeCurrency } from './normalizers.js'
+import { matchItemSync, SEED_ALIASES } from './itemMatcher.js'
 import type { Action, InventoryItem, ParsedIntent, ParsedLineItem, Period, UserContext } from './types.js'
 
 const NLP_TIMEOUT_MS = 8_000
@@ -151,43 +152,8 @@ function emptyIntent(action: Action, overrides: Partial<ParsedIntent> = {}): Par
   }
 }
 
-function wordPattern(value: string): RegExp {
-  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')
-  return new RegExp(`(^|\\b)${escaped}(\\b|$)`, 'i')
-}
-
 function findInventoryMatch(text: string, context: UserContext): InventoryItem | null {
-  const candidates = context.items
-  for (const item of candidates) {
-    if (wordPattern(item.nameNormalized).test(text) || wordPattern(item.name).test(text)) return item
-  }
-  for (const item of candidates) {
-    if (item.aliases.some((alias) => wordPattern(alias.toLowerCase()).test(text))) return item
-  }
-  const seedAliases: Record<string, string> = {
-    sukari: 'sugar',
-    sabuni: 'soap',
-    unga: 'maize flour',
-    posho: 'maize flour',
-    mchele: 'rice',
-  }
-  for (const [alias, normalized] of Object.entries(seedAliases)) {
-    if (!wordPattern(alias).test(text)) continue
-    const item = candidates.find((candidate) => candidate.nameNormalized === normalized)
-    if (item) return item
-    return {
-      id: '',
-      name: normalized,
-      nameNormalized: normalized,
-      aliases: [alias],
-      unit: 'piece',
-      qtyInStock: 0,
-      lowStockThreshold: 0,
-      typicalBuyPrice: null,
-      typicalSellPrice: null,
-    }
-  }
-  return null
+  return matchItemSync(text.toLowerCase().trim(), context.items)
 }
 
 function numberTokens(text: string): string[] {

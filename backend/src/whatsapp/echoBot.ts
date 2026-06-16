@@ -6,6 +6,7 @@ import { findSales } from '../repositories/salesRepository.js'
 import { upsertUserContext, saveInteractionPair } from '../repositories/userContextRepository.js'
 import { parseIntent } from '../nlp/intentParser.js'
 import { formatUGX, formatUGXShort } from '../nlp/normalizers.js'
+import { enrichMatchedItems } from '../nlp/itemMatcher.js'
 import { createSaleRecord, getTodaySummary } from '../services/salesService.js'
 import { createPurchaseRecord } from '../services/purchasesService.js'
 import { addItem, getLowStockItems, listItems } from '../services/inventoryService.js'
@@ -110,7 +111,7 @@ export async function handleIncomingMessage(
         })
       }
     } else if (intent.action === 'sale') {
-      reply = await handleSaleIntent(tenant.id, phone, intent)
+      reply = await handleSaleIntent(tenant.id, phone, intent, inventoryItems)
     } else if (intent.action === 'purchase') {
       reply = await handlePurchaseIntent(tenant.id, phone, intent, inventoryItems)
     } else if (intent.action === 'stock_check') {
@@ -187,9 +188,15 @@ function formatSaleLines(lines: { itemName: string; qty: number; unitPrice: numb
 async function handleSaleIntent(
   tenantId: string,
   recordedBy: string,
-  intent: ParsedIntent
+  intent: ParsedIntent,
+  inventoryItems: InventoryItem[]
 ): Promise<string> {
   if (intent.items.length === 0) return "Which item did you sell? Try: 'sold 2 sugar at 6500'"
+
+  // Enrich unmatched items via async full matcher (tenant alias table + pg_trgm)
+  await withTenant(tenantId, async (tx) => {
+    await enrichMatchedItems(intent.items, inventoryItems, tenantId, tx)
+  })
 
   const saleItems = []
   for (const line of intent.items) {
