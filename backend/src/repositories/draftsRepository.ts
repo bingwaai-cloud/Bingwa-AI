@@ -14,8 +14,9 @@ export interface CreateDraftInput {
   userPhone: string
   action: string
   payload: Prisma.InputJsonValue
-  state: 'parsed' | 'pending_clarification'
+  state: 'parsed' | 'pending_clarification' | 'confirmed'
   clarificationQuestion?: string | null
+  committedEntityId?: string | null
   expiresAt: Date
 }
 
@@ -38,6 +39,7 @@ export async function createDraft(
       payload: input.payload,
       state: input.state,
       clarificationQuestion: input.clarificationQuestion ?? null,
+      committedEntityId: input.committedEntityId ?? null,
       expiresAt: input.expiresAt,
     },
   })
@@ -78,6 +80,62 @@ export async function findPendingDraftForPhone(
     where: { tenantId, userPhone, state: 'pending_clarification', deletedAt: null },
     orderBy: { createdAt: 'desc' },
   })
+}
+
+/**
+ * Find the most recent draft in 'confirmed' state for a phone number
+ * that has not yet expired.  Used by the NO-reversal flow.
+ */
+export async function findConfirmedDraftForPhone(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  userPhone: string
+): Promise<DraftTransaction | null> {
+  return tx.draftTransaction.findFirst({
+    where: {
+      tenantId,
+      userPhone,
+      state: 'confirmed',
+      deletedAt: null,
+      expiresAt: { gte: new Date() },
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+}
+
+/**
+ * Row-lock the most recent non-expired confirmed draft for a phone.
+ * Returns null if none exists (expired or already cancelled).
+ */
+export async function lockConfirmedDraftForPhone(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  userPhone: string
+): Promise<DraftTransaction | null> {
+  const rows = await tx.$queryRaw<DraftTransaction[]>`
+    SELECT id,
+           tenant_id AS "tenantId",
+           user_phone AS "userPhone",
+           action,
+           payload,
+           state,
+           clarification_question AS "clarificationQuestion",
+           committed_entity_id AS "committedEntityId",
+           expires_at AS "expiresAt",
+           created_at AS "createdAt",
+           updated_at AS "updatedAt",
+           deleted_at AS "deletedAt"
+    FROM public.draft_transactions
+    WHERE tenant_id = ${tenantId}::uuid
+      AND user_phone = ${userPhone}
+      AND state = 'confirmed'
+      AND expires_at >= NOW()
+      AND deleted_at IS NULL
+    ORDER BY created_at DESC
+    LIMIT 1
+    FOR UPDATE
+  `
+  return rows[0] ?? null
 }
 
 export async function lockDraftById(

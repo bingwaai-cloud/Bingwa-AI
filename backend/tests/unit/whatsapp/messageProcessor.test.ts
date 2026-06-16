@@ -1,8 +1,9 @@
-import { jest } from '@jest/globals'
+import { jest, beforeAll, beforeEach, describe, expect, it } from '@jest/globals'
 
 const handleIncomingMessage = jest.fn<() => Promise<void>>()
 const sendTextMessage = jest.fn<() => Promise<void>>()
 const resolvePendingDraftMessage = jest.fn<() => Promise<unknown>>()
+const resolveConfirmDefaultMessage = jest.fn<() => Promise<unknown>>()
 const findTenantByOwnerPhone = jest.fn<() => Promise<unknown>>()
 
 jest.unstable_mockModule('../../../src/whatsapp/echoBot.js', () => ({
@@ -20,15 +21,22 @@ jest.unstable_mockModule('../../../src/repositories/tenantRepository.js', () => 
 
 jest.unstable_mockModule('../../../src/services/draftsService.js', () => ({
   resolvePendingDraftMessage,
+  resolveConfirmDefaultMessage,
 }))
 
-const { processIncomingText } = await import('../../../src/whatsapp/messageProcessor.js')
+let processIncomingText: (from: string, text: string, messageId: string) => Promise<void>
+
+beforeAll(async () => {
+  const mod = await import('../../../src/whatsapp/messageProcessor.js')
+  processIncomingText = mod.processIncomingText
+})
 
 describe('WhatsApp draft-first message processing', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     handleIncomingMessage.mockResolvedValue()
     sendTextMessage.mockResolvedValue()
+    resolveConfirmDefaultMessage.mockResolvedValue(null)
   })
 
   it('resolves a pending draft and does not parse the reply as a new intent', async () => {
@@ -64,5 +72,27 @@ describe('WhatsApp draft-first message processing', () => {
       handleIncomingMessage.mock.invocationCallOrder[0]!
     )
     expect(handleIncomingMessage).toHaveBeenCalledWith('0700000401', 'stock check', 'wamid.2')
+  })
+
+  it('sends reversal reply and skips NLP when "NO" triggers confirm-default undo', async () => {
+    findTenantByOwnerPhone.mockResolvedValue({ id: 'd1b2c3d4-0000-0000-0000-0000000000a1' })
+    resolveConfirmDefaultMessage.mockResolvedValue({
+      status: 'reversed',
+      reply: '↩️ Sugar has been undone. Stock restored. Please re-enter your corrected sale.',
+    })
+
+    await processIncomingText('0700000401', 'NO', 'wamid.3')
+
+    expect(resolveConfirmDefaultMessage).toHaveBeenCalledWith(
+      'd1b2c3d4-0000-0000-0000-0000000000a1',
+      '+256700000401',
+      'NO'
+    )
+    expect(sendTextMessage).toHaveBeenCalledWith(
+      '+256700000401',
+      '↩️ Sugar has been undone. Stock restored. Please re-enter your corrected sale.'
+    )
+    expect(resolvePendingDraftMessage).not.toHaveBeenCalled()
+    expect(handleIncomingMessage).not.toHaveBeenCalled()
   })
 })

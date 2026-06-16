@@ -45,7 +45,7 @@ SUPPORTED ACTIONS:
 - report: requesting a report (report, summary, how did I do, leo nilifanya)
 - customer_add: adding a customer (add customer, save number, new customer, mteja)
 - supplier_add: adding a supplier (add supplier, new supplier)
-- expense: recording an expense (rent, electricity, expense, gharama, wage, salary)
+- expense: recording an expense (rent, electricity, bill, water, transport, internet, airtime, data, security, fuel, cleaning, repair, wages, salary, gharama). Examples: "rent 800k", "electricity bill 150k", "paid transport 50k", "water 30k", "airtime 100k". Any message with a bill/payment keyword + amount that isn't a purchase/sale is likely an expense.
 - marketing: send broadcast message (send message, broadcast, notify customers, offer)
 - receipt: print/get a receipt (print receipt, receipt, risiti)
 - subscription: subscription/payment plan intent. Phrases like "subscribe to premium", "renew plan", "pay subscription", "upgrade package" MUST be action "subscription".

@@ -19,6 +19,8 @@ import { logger } from '../utils/logger.js'
 import { normalizePhone, maskPhone } from '../utils/phone.js'
 import type { UserContext, InventoryItem, ParsedIntent, ParsedLineItem } from '../nlp/types.js'
 
+const CONFIRM_DEFAULT_WINDOW_MS = 10 * 60 * 1000 // 10 minutes
+
 /**
  * Main WhatsApp message handler.
  *
@@ -95,6 +97,8 @@ export async function handleIncomingMessage(
   })
 
   let reply: string
+  let committedEntityId: string | null = null
+  let committedEntityType: string | null = null
 
   try {
     if (intent.resolution === 'clarify' || intent.resolution === 'reject' || intent.action === 'unknown') {
@@ -111,7 +115,10 @@ export async function handleIncomingMessage(
         })
       }
     } else if (intent.action === 'sale') {
-      reply = await handleSaleIntent(tenant.id, phone, intent, inventoryItems)
+      const result = await handleSaleIntent(tenant.id, phone, intent, inventoryItems)
+      reply = result.reply
+      committedEntityId = result.saleId
+      committedEntityType = 'sale'
     } else if (intent.action === 'purchase') {
       reply = await handlePurchaseIntent(tenant.id, phone, intent, inventoryItems)
     } else if (intent.action === 'stock_check') {
@@ -135,6 +142,20 @@ export async function handleIncomingMessage(
     } else {
       reply =
         "I didn't catch that. Try:\n• 'sold 2 sugar at 6500'\n• 'bought 5 flour 70k each'\n• 'stock check'\n• 'report'"
+    }
+
+    // After confirm_default commit: persist tracking draft in 'confirmed' state
+    // so the user has a 10-minute window to reply "NO" and undo.
+    if (intent.resolution === 'confirm_default' && (intent.action === 'sale' || intent.action === 'purchase' || intent.action === 'expense')) {
+      await createDraft(tenant.id, {
+        userPhone: phone,
+        action: intent.action,
+        payload: intent,
+        state: 'confirmed',
+        clarificationQuestion: reply,
+        committedEntityId: committedEntityId ?? undefined,
+        expiresAt: new Date(Date.now() + CONFIRM_DEFAULT_WINDOW_MS),
+      })
     }
   } catch (err) {
     logger.error({ event: 'whatsapp_dispatch_error', tenantId: tenant.id, err })
@@ -190,8 +211,8 @@ async function handleSaleIntent(
   recordedBy: string,
   intent: ParsedIntent,
   inventoryItems: InventoryItem[]
-): Promise<string> {
-  if (intent.items.length === 0) return "Which item did you sell? Try: 'sold 2 sugar at 6500'"
+): Promise<{ reply: string; saleId: string }> {
+  if (intent.items.length === 0) return { reply: "Which item did you sell? Try: 'sold 2 sugar at 6500'", saleId: '' }
 
   // Enrich unmatched items via async full matcher (tenant alias table + pg_trgm)
   await withTenant(tenantId, async (tx) => {
@@ -201,10 +222,10 @@ async function handleSaleIntent(
   const saleItems = []
   for (const line of intent.items) {
     const itemName = lineItemName(line)
-    if (!itemName) return "Which item did you sell? Try: 'sold 2 sugar at 6500'"
-    if (!line.qty) return `How many ${itemName} did you sell?`
+    if (!itemName) return { reply: `Which item did you sell? Try: 'sold 2 sugar at 6500'`, saleId: '' }
+    if (!line.qty) return { reply: `How many ${itemName} did you sell?`, saleId: '' }
     const prices = parsedLinePrices(line)
-    if (!prices) return `What was the price for ${itemName}?`
+    if (!prices) return { reply: `What was the price for ${itemName}?`, saleId: '' }
 
     saleItems.push({
       itemId: line.matchedItemId ?? undefined,
@@ -232,7 +253,7 @@ async function handleSaleIntent(
   if (anomaly?.anomalyReason && reply.length < 240) reply += `. Note: ${anomaly.anomalyReason}`
   if (intent.resolution === 'confirm_default' && reply.length < 270) reply += '. Reply NO to fix'
 
-  return reply
+  return { reply, saleId: result.sale.id }
 }
 
 async function handlePurchaseIntent(

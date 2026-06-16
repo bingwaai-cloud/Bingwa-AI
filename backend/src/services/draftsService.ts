@@ -7,13 +7,15 @@ import {
   createDraft as insertDraft,
   findOpenDrafts,
   findPendingDraftForPhone,
+  findConfirmedDraftForPhone,
   lockDraftById,
   lockPendingDraftForPhone,
+  lockConfirmedDraftForPhone,
   updateDraft,
   type DraftPage,
   type DraftState,
 } from '../repositories/draftsRepository.js'
-import { createSaleRecordInTransaction } from './salesService.js'
+import { createSaleRecordInTransaction, cancelSaleInTransaction } from './salesService.js'
 import { createPurchaseRecordInTransaction } from './purchasesService.js'
 import { recordExpenseInTransaction } from './expensesService.js'
 import { AppError, ErrorCodes } from '../utils/AppError.js'
@@ -32,8 +34,9 @@ export interface CreateDraftParams {
   userPhone: string
   action: string
   payload: ParsedIntent | Record<string, unknown>
-  state?: 'parsed' | 'pending_clarification'
+  state?: 'parsed' | 'pending_clarification' | 'confirmed'
   clarificationQuestion?: string | null
+  committedEntityId?: string | null
   expiresAt?: Date
 }
 
@@ -402,6 +405,7 @@ export async function createDraft(
       payload: payload as Prisma.InputJsonValue,
       state,
       clarificationQuestion: params.clarificationQuestion,
+      committedEntityId: params.committedEntityId ?? null,
       expiresAt: params.expiresAt ?? new Date(Date.now() + DEFAULT_DRAFT_LIFETIME_MS),
     })
   )
@@ -549,4 +553,119 @@ export async function resolvePendingDraftMessage(
 
     return commitConfirmedDraft(tx, tenantId, confirmed, payload)
   })
+}
+
+// ── Confirm-default reversal (NO within 10-min window) ───────────────────────
+
+export interface ReversalResult {
+  /** 'reversed' = sale cancelled + correction draft open; 'expired' = too late */
+  status: 'reversed' | 'expired'
+  /** Human-readable reply to send back */
+  reply: string
+  /** The new correction draft (only set on 'reversed') */
+  correctionDraft?: DraftTransaction
+  /** The cancelled draft id */
+  cancelledDraftId?: string
+}
+
+/**
+ * Handle a "NO" reply to a confirm_default draft within the 10-minute window.
+ * Transitions the confirmed draft → cancelled, calls cancelSale (soft-delete +
+ * stock restore + audit in one tx), and opens a new correction draft.
+ *
+ * Outside the window → "expired" status with contact-support reply.
+ */
+export async function reverseConfirmDefault(
+  tenantId: string,
+  userPhone: string
+): Promise<ReversalResult> {
+  return withTenant(tenantId, async (tx) => {
+    const draft = await lockConfirmedDraftForPhone(tx, tenantId, userPhone)
+    if (!draft) {
+      // Check if there was an expired confirmed draft at all
+      const anyConfirmed = await findConfirmedDraftForPhone(tx, tenantId, userPhone)
+      if (!anyConfirmed) {
+        // Also check for expired confirmed drafts
+        const expiredDrafts = await tx.draftTransaction.findMany({
+          where: {
+            tenantId,
+            userPhone,
+            state: 'confirmed',
+            deletedAt: null,
+            expiresAt: { lt: new Date() },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        })
+        if (expiredDrafts.length > 0) {
+          return {
+            status: 'expired',
+            reply: '⏰ The 10-minute undo window has passed. Please contact support or edit this sale on the web dashboard.',
+            cancelledDraftId: expiredDrafts[0]?.id,
+          }
+        }
+      }
+      return {
+        status: 'expired',
+        reply: 'No pending sale to undo. If you need help, reply with your correction or contact support.',
+      }
+    }
+
+    // Transition confirmed → cancelled (WP-4 already allows this)
+    assertTransition(draft.state as DraftState, 'cancelled')
+
+    // Cancel the committed sale (soft-delete + stock restore + audit — one tx)
+    if (draft.committedEntityId && draft.action === 'sale') {
+      await cancelSaleInTransaction(tx, tenantId, draft.committedEntityId, userPhone)
+    }
+
+    const cancelled = await updateDraft(tx, tenantId, draft.id, {
+      state: 'cancelled',
+      clarificationQuestion: null,
+    })
+    if (!cancelled) throw new AppError(ErrorCodes.DRAFT_NOT_FOUND, 'Draft not found', 404)
+
+    // Open a new correction draft so the user can re-enter the correct sale
+    const correctionDraft = await insertDraft(tx, {
+      tenantId,
+      userPhone,
+      action: draft.action,
+      payload: draft.payload as Prisma.InputJsonValue,
+      state: 'parsed',
+      clarificationQuestion: 'Please re-enter your corrected sale.',
+      committedEntityId: null,
+      expiresAt: new Date(Date.now() + DEFAULT_DRAFT_LIFETIME_MS),
+    })
+
+    // Determine item name for the reply
+    const payload = draft.payload as Record<string, unknown> | null
+    const items = Array.isArray(payload?.['items']) ? payload!['items'] as Array<Record<string, unknown>> : []
+    const itemNames = items.map((i) => i['item'] ?? 'item').join(', ')
+    const summary = itemNames || 'the sale'
+
+    return {
+      status: 'reversed',
+      reply: `↩️ ${summary} has been undone. Stock restored. Please re-enter your corrected sale.`,
+      correctionDraft,
+      cancelledDraftId: draft.id,
+    }
+  })
+}
+
+/**
+ * Entry point for messageProcessor: when the user sends "NO" (or variant),
+ * check for a confirmed draft first (confirm-default reversal), then fall
+ * through to pending clarification handling.
+ */
+export async function resolveConfirmDefaultMessage(
+  tenantId: string,
+  userPhone: string,
+  message: string
+): Promise<ReversalResult | null> {
+  const lower = message.toLowerCase().trim()
+  const isNo = /^(no|nedda|hapana|nope)$/i.test(lower)
+
+  if (!isNo) return null
+
+  return reverseConfirmDefault(tenantId, userPhone)
 }

@@ -357,50 +357,60 @@ export async function getTodaySummary(
   return withTenant(tenantId, (tx) => getDailySummary(tx, tenantId, todayStart, now))
 }
 
+export async function cancelSaleInTransaction(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  saleId: string,
+  recordedBy?: string,
+  actorUserId?: string
+): Promise<SaleWithLines> {
+  const existing = await findSaleById(tx, tenantId, saleId)
+  if (!existing) {
+    throw new AppError(ErrorCodes.ITEM_NOT_FOUND, 'Sale not found', 404)
+  }
+
+  const cancelled = await softDeleteSale(tx, tenantId, saleId)
+  if (!cancelled) {
+    throw new AppError(ErrorCodes.ITEM_NOT_FOUND, 'Sale already cancelled', 404)
+  }
+  logger.info({ event: 'sale_cancelled', tenantId, saleId, recordedBy })
+
+  for (const line of existing.lines) {
+    if (line.itemId) {
+      await incrementStock(tx, tenantId, line.itemId, line.qty)
+    }
+  }
+
+  await insertAuditLog(tx, {
+    tenantId,
+    userPhone: recordedBy ?? null,
+    actorUserId: actorUserId ?? null,
+    action: 'sale.cancelled',
+    entityType: 'sale',
+    entityId: saleId,
+    oldValue: {
+      totalPrice: existing.totalPrice,
+      lines: existing.lines.map((line) => ({
+        itemName: line.itemName,
+        qty: line.qty,
+        unitPrice: line.unitPrice,
+        totalPrice: line.totalPrice,
+      })),
+    },
+    newValue: { deletedAt: new Date().toISOString() },
+    source: 'api',
+  })
+
+  return cancelled
+}
+
 export async function cancelSale(
   tenantId: string,
   saleId: string,
   recordedBy?: string,
   actorUserId?: string
 ): Promise<SaleWithLines> {
-  return withTenant(tenantId, async (tx) => {
-    const existing = await findSaleById(tx, tenantId, saleId)
-    if (!existing) {
-      throw new AppError(ErrorCodes.ITEM_NOT_FOUND, 'Sale not found', 404)
-    }
-
-    const cancelled = await softDeleteSale(tx, tenantId, saleId)
-    if (!cancelled) {
-      throw new AppError(ErrorCodes.ITEM_NOT_FOUND, 'Sale already cancelled', 404)
-    }
-    logger.info({ event: 'sale_cancelled', tenantId, saleId, recordedBy })
-
-    for (const line of existing.lines) {
-      if (line.itemId) {
-        await incrementStock(tx, tenantId, line.itemId, line.qty)
-      }
-    }
-
-    await insertAuditLog(tx, {
-      tenantId,
-      userPhone: recordedBy ?? null,
-      actorUserId: actorUserId ?? null,
-      action: 'sale.cancelled',
-      entityType: 'sale',
-      entityId: saleId,
-      oldValue: {
-        totalPrice: existing.totalPrice,
-        lines: existing.lines.map((line) => ({
-          itemName: line.itemName,
-          qty: line.qty,
-          unitPrice: line.unitPrice,
-          totalPrice: line.totalPrice,
-        })),
-      },
-      newValue: { deletedAt: new Date().toISOString() },
-      source: 'api',
-    })
-
-    return cancelled
-  })
+  return withTenant(tenantId, (tx) =>
+    cancelSaleInTransaction(tx, tenantId, saleId, recordedBy, actorUserId)
+  )
 }

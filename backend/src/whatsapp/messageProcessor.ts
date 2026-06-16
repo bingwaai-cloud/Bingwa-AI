@@ -3,7 +3,11 @@ import { markMessageRead, sendTextMessage } from './whatsappClient.js'
 import { logger } from '../utils/logger.js'
 import { normalizePhone } from '../utils/phone.js'
 import { findTenantByOwnerPhone } from '../repositories/tenantRepository.js'
-import { resolvePendingDraftMessage, type DraftCommitResult } from '../services/draftsService.js'
+import {
+  resolvePendingDraftMessage,
+  resolveConfirmDefaultMessage,
+  type DraftCommitResult,
+} from '../services/draftsService.js'
 import { AppError } from '../utils/AppError.js'
 import { formatUGX, formatUGXShort } from '../nlp/normalizers.js'
 
@@ -128,6 +132,13 @@ export async function processIncomingText(from: string, text: string, messageId:
 
   if (tenant) {
     try {
+      // WP-14: confirm-default reversal (NO / nedda / hapana within 10-min window)
+      const reversal = await resolveConfirmDefaultMessage(tenant.id, phone, text)
+      if (reversal) {
+        await sendTextMessage(phone, reversal.reply)
+        return
+      }
+
       // WP-13 moves this thin service delegation to the shared /api/v1 channels adapter.
       const resolution = await resolvePendingDraftMessage(tenant.id, phone, text)
       if (resolution) {

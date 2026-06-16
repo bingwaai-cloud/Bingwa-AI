@@ -3,6 +3,7 @@ import { logger } from '../utils/logger.js'
 import { buildSystemPrompt } from './contextBuilder.js'
 import { normalizeCurrency } from './normalizers.js'
 import { matchItemSync, SEED_ALIASES } from './itemMatcher.js'
+import { resolveIntent, type ResolvedIntent } from './confidence.js'
 import type { Action, InventoryItem, ParsedIntent, ParsedLineItem, Period, UserContext } from './types.js'
 
 const NLP_TIMEOUT_MS = 8_000
@@ -305,10 +306,11 @@ function deterministicIntent(message: string, context: UserContext): ParsedInten
       }] : [],
     })
   }
-  if (/\b(rent|electricity|bill|expense|gharama|wage|salary)\b/.test(lower)) {
+  if (/\b(rent|electricity|bill|expense|gharama|wage|salary|water|transport|internet|airtime|data|security|fuel|cleaning|repair|paid)\b/.test(lower)) {
     const amountToken = numberTokens(lower).at(-1) ?? null
     const amount = amountToken ? normalizeCurrency(amountToken) : null
-    const name = lower.match(/\b(rent|electricity|bill|wage|salary)\b/)?.[1] ?? 'expense'
+    const nameMatch = lower.match(/\b(rent|electricity|bill|wage|salary|water|transport|internet|airtime|data|security|fuel|cleaning|repair)\b/)
+    const name = nameMatch?.[1] ?? 'expense'
     return emptyIntent('expense', {
       expenseName: name,
       items: [{
@@ -442,7 +444,7 @@ async function callClaudeWithTimeout(
 }
 
 /**
- * Parse a raw WhatsApp message into a structured intent.
+ * Parse a raw WhatsApp message into a structured intent with structural resolution.
  *
  * This is the main public entry point for the NLP engine.
  * It never throws. On failure it returns a safe fallback.
@@ -450,21 +452,36 @@ async function callClaudeWithTimeout(
 export async function parseIntent(
   message: string,
   context: UserContext
-): Promise<ParsedIntent> {
+): Promise<ResolvedIntent> {
   if (!process.env['ANTHROPIC_API_KEY']) {
     logger.warn({ event: 'nlp_skipped', reason: 'ANTHROPIC_API_KEY not set' })
-    return coerceSubscriptionIntent(message, FALLBACK_INTENT)
+    return resolveIntent(coerceSubscriptionIntent(message, FALLBACK_INTENT), context)
   }
 
-  const result = coerceSubscriptionIntent(message, await callClaudeWithTimeout(message, context))
+  // Deterministic pre-check: catch strong signals (expense, subscription, report,
+  // receipt, marketing, customer_add, supplier_add) before the LLM so
+  // TC-08/TC-18 and similar patterns don't depend on LLM classification.
+  // Sale/purchase/stock_check deliberately go through the LLM for best parsing.
+  const DETERMINISTIC_FIRST_ACTIONS = new Set<Action>([
+    'expense', 'subscription', 'report', 'receipt', 'marketing',
+    'customer_add', 'supplier_add',
+  ])
+  const deterministic = deterministicIntent(message, context)
+  if (deterministic && DETERMINISTIC_FIRST_ACTIONS.has(deterministic.action)) {
+    logger.debug({ event: 'nlp_deterministic_hit', action: deterministic.action })
+    return resolveIntent(coerceSubscriptionIntent(message, deterministic), context)
+  }
+
+  const parsed = coerceSubscriptionIntent(message, await callClaudeWithTimeout(message, context))
+  const resolved = resolveIntent(parsed, context)
 
   logger.debug({
     event: 'nlp_parsed',
-    action: result.action,
-    confidence: result.confidence,
-    resolution: result.resolution,
-    itemCount: result.items.length,
+    action: resolved.action,
+    confidence: resolved.confidence,
+    resolution: resolved.resolution,
+    itemCount: resolved.items.length,
   })
 
-  return result
+  return resolved
 }
