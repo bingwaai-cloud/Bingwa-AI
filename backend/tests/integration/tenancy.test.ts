@@ -77,7 +77,7 @@ describe('Cross-tenant isolation (RLS)', () => {
     const created = await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${makeToken(B)}`)
-      .send({ itemId: bItemId, itemName: 'Rice', qty: 1, unitPrice: 5000, totalPrice: 5000 })
+      .send({ items: [{ itemId: bItemId, itemName: 'Rice', qty: 1, unitPrice: 5000, totalPrice: 5000 }] })
     expect(created.status).toBe(201)
     const saleId = created.body.data.sale.id as string
 

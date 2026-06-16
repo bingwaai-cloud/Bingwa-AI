@@ -18,7 +18,7 @@ export async function getTopItemsByRevenue(
   to: Date,
   limit = 3
 ): Promise<TopItem[]> {
-  const rows = await tx.sale.groupBy({
+  const rows = await tx.saleLineItem.groupBy({
     by: ['itemName'],
     where: { tenantId, deletedAt: null, createdAt: { gte: from, lte: to } },
     _sum: { totalPrice: true },

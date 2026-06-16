@@ -22,30 +22,48 @@ import type { ParsedIntent } from '../../src/nlp/types.js'
 const A_ID = 'd1b2c3d4-0000-0000-0000-0000000000a1'
 const B_ID = 'd1b2c3d4-0000-0000-0000-0000000000b1'
 const ITEM_ID = 'd1b2c3d4-0000-0000-0000-0000000000a2'
+const SOAP_ID = 'd1b2c3d4-0000-0000-0000-0000000000a3'
+const RICE_ID = 'd1b2c3d4-0000-0000-0000-0000000000a4'
 const PHONE_A = '+256700000401'
 const PHONE_B = '+256700000402'
 
-function saleIntent(overrides: Partial<ParsedIntent> = {}): ParsedIntent {
+type IntentOverrides = Partial<ParsedIntent> & Partial<ParsedIntent['items'][number]> & {
+  needsClarification?: boolean
+}
+
+function saleIntent(overrides: IntentOverrides = {}): ParsedIntent {
+  const line = {
+    item: overrides.item === undefined ? 'Sugar' : overrides.item,
+    itemNormalized: overrides.itemNormalized === undefined ? 'sugar' : overrides.itemNormalized,
+    matchedItemId: overrides.matchedItemId === undefined ? ITEM_ID : overrides.matchedItemId,
+    qty: overrides.qty === undefined ? 2 : overrides.qty,
+    unit: overrides.unit === undefined ? 'kg' : overrides.unit,
+    unitPrice: overrides.unitPrice === undefined ? null : overrides.unitPrice,
+    totalPrice: overrides.totalPrice === undefined ? null : overrides.totalPrice,
+    anomaly: overrides.anomaly ?? false,
+    anomalyReason: overrides.anomalyReason ?? null,
+  }
+
   return {
-    action: 'sale',
-    item: 'Sugar',
-    itemNormalized: 'sugar',
-    qty: 2,
-    unit: 'kg',
-    unitPrice: null,
-    totalPrice: null,
-    confidence: 0.6,
-    needsClarification: true,
-    clarificationQuestion: 'What was the price for Sugar?',
+    action: overrides.action ?? 'sale',
+    items: overrides.items ?? [line],
+    confidence: overrides.confidence ?? 0.6,
+    resolution: overrides.resolution ?? 'clarify',
+    clarificationQuestion: overrides.clarificationQuestion === undefined
+      ? 'What was the price for Sugar?'
+      : overrides.clarificationQuestion,
     supplierName: null,
     customerPhone: null,
     customerName: null,
     expenseName: null,
     period: null,
-    anomaly: false,
-    anomalyReason: null,
     notes: null,
-    ...overrides,
+    ...('supplierName' in overrides ? { supplierName: overrides.supplierName ?? null } : {}),
+    ...('customerPhone' in overrides ? { customerPhone: overrides.customerPhone ?? null } : {}),
+    ...('customerName' in overrides ? { customerName: overrides.customerName ?? null } : {}),
+    ...('expenseName' in overrides ? { expenseName: overrides.expenseName ?? null } : {}),
+    ...('period' in overrides ? { period: overrides.period ?? null } : {}),
+    ...('notes' in overrides ? { notes: overrides.notes ?? null } : {}),
   }
 }
 
@@ -69,6 +87,20 @@ describe('Draft transactions', () => {
       qtyInStock: 20,
       typicalSellPrice: 6500,
     })
+    await seedItem(A_ID, {
+      id: SOAP_ID,
+      name: 'Soap',
+      unit: 'piece',
+      qtyInStock: 20,
+      typicalSellPrice: 2500,
+    })
+    await seedItem(A_ID, {
+      id: RICE_ID,
+      name: 'Rice',
+      unit: 'kg',
+      qtyInStock: 20,
+      typicalSellPrice: 5000,
+    })
   })
 
   beforeEach(async () => {
@@ -81,6 +113,8 @@ describe('Draft transactions', () => {
       await tx.auditLog.deleteMany({})
       await tx.expense.deleteMany({})
       await tx.item.update({ where: { id: ITEM_ID }, data: { qtyInStock: 20 } })
+      await tx.item.update({ where: { id: SOAP_ID }, data: { qtyInStock: 20 } })
+      await tx.item.update({ where: { id: RICE_ID }, data: { qtyInStock: 20 } })
     })
     await withTenant(B_ID, (tx) => tx.draftTransaction.deleteMany({}))
   })
@@ -144,7 +178,7 @@ describe('Draft transactions', () => {
       .send({
         userPhone: PHONE_A,
         action: 'sale',
-        payload: saleIntent({ needsClarification: false, clarificationQuestion: null }),
+        payload: saleIntent({ resolution: 'commit', clarificationQuestion: null }),
       })
 
     expect(res.status).toBe(201)
@@ -159,7 +193,7 @@ describe('Draft transactions', () => {
       payload: saleIntent({
         unitPrice: 6500,
         totalPrice: 13000,
-        needsClarification: false,
+        resolution: 'commit',
         clarificationQuestion: null,
       }),
     })
@@ -206,7 +240,7 @@ describe('Draft transactions', () => {
         action: 'purchase',
         unitPrice: 5000,
         totalPrice: 10000,
-        needsClarification: false,
+        resolution: 'commit',
         clarificationQuestion: null,
       }),
     })
@@ -223,6 +257,70 @@ describe('Draft transactions', () => {
     expect(persisted.savedDraft?.committedEntityId).toBe(persisted.purchase?.id)
   })
 
+  it('commits a multi-item draft to one sale with N lines', async () => {
+    const draft = await createDraft(A_ID, {
+      userPhone: PHONE_A,
+      action: 'sale',
+      payload: saleIntent({
+        resolution: 'commit',
+        clarificationQuestion: null,
+        items: [
+          {
+            item: 'Sugar',
+            itemNormalized: 'sugar',
+            matchedItemId: ITEM_ID,
+            qty: 2,
+            unit: 'kg',
+            unitPrice: 3000,
+            totalPrice: 6000,
+            anomaly: false,
+            anomalyReason: null,
+          },
+          {
+            item: 'Soap',
+            itemNormalized: 'soap',
+            matchedItemId: SOAP_ID,
+            qty: 3,
+            unit: 'piece',
+            unitPrice: 2500,
+            totalPrice: 7500,
+            anomaly: false,
+            anomalyReason: null,
+          },
+          {
+            item: 'Rice',
+            itemNormalized: 'rice',
+            matchedItemId: RICE_ID,
+            qty: 1,
+            unit: 'kg',
+            unitPrice: 5000,
+            totalPrice: 5000,
+            anomaly: false,
+            anomalyReason: null,
+          },
+        ],
+      }),
+    })
+
+    const result = await confirmAndCommitDraft(A_ID, draft.id)
+    const persisted = await withTenant(A_ID, async (tx) => {
+      const sale = await tx.sale.findFirst({ where: { id: result.committedEntityId, tenantId: A_ID } })
+      const lines = await tx.saleLineItem.findMany({ where: { saleId: result.committedEntityId }, orderBy: { itemName: 'asc' } })
+      const items = await tx.item.findMany({
+        where: { id: { in: [ITEM_ID, SOAP_ID, RICE_ID] } },
+        select: { id: true, qtyInStock: true },
+      })
+      return { sale, lines, items }
+    })
+
+    expect(result.committedEntityType).toBe('sale')
+    expect(persisted.sale?.totalPrice).toBe(18500)
+    expect(persisted.lines).toHaveLength(3)
+    expect(persisted.items.find((i) => i.id === ITEM_ID)?.qtyInStock).toBe(18)
+    expect(persisted.items.find((i) => i.id === SOAP_ID)?.qtyInStock).toBe(17)
+    expect(persisted.items.find((i) => i.id === RICE_ID)?.qtyInStock).toBe(19)
+  })
+
   it('rolls back confirmation when the real financial write fails', async () => {
     const draft = await createDraft(A_ID, {
       userPhone: PHONE_A,
@@ -231,7 +329,7 @@ describe('Draft transactions', () => {
         qty: 100,
         unitPrice: 6500,
         totalPrice: 650000,
-        needsClarification: false,
+        resolution: 'commit',
         clarificationQuestion: null,
       }),
     })

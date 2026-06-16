@@ -133,6 +133,26 @@ model Sale {
   @@map("sales")
 }
 
+model SaleLineItem {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  saleId      String    @map("sale_id") @db.Uuid
+  itemId      String?   @map("item_id") @db.Uuid
+  itemName    String    @map("item_name") @db.VarChar(255)
+  qty         Int
+  unit        String    @default("piece") @db.VarChar(50)
+  unitPrice   Int       @map("unit_price")
+  totalPrice  Int       @map("total_price")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz()
+
+  @@index([tenantId, createdAt])
+  @@index([saleId])
+  @@index([itemId])
+  @@map("sale_line_items")
+}
+
 model Purchase {
   id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId     String    @map("tenant_id") @db.Uuid

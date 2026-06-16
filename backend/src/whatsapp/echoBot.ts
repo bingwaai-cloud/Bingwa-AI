@@ -16,7 +16,7 @@ import { createDraft } from '../services/draftsService.js'
 import { previewBroadcast, sendBroadcast } from '../services/marketingService.js'
 import { logger } from '../utils/logger.js'
 import { normalizePhone, maskPhone } from '../utils/phone.js'
-import type { UserContext, InventoryItem, ParsedIntent } from '../nlp/types.js'
+import type { UserContext, InventoryItem, ParsedIntent, ParsedLineItem } from '../nlp/types.js'
 
 /**
  * Main WhatsApp message handler.
@@ -39,7 +39,6 @@ export async function handleIncomingMessage(
     preview: messageText.slice(0, 60),
   })
 
-  // 1. Identify tenant
   const tenant = await findTenantByOwnerPhone(phone)
 
   if (!tenant) {
@@ -51,7 +50,6 @@ export async function handleIncomingMessage(
     return
   }
 
-  // 2. Load / upsert user context + 3. load inventory (RLS-scoped reads)
   const contextRecord = await withTenant(tenant.id, (tx) => upsertUserContext(tx, tenant.id, phone))
   const dbItems = await withTenant(tenant.id, (tx) => findAllItems(tx, tenant.id))
 
@@ -67,7 +65,6 @@ export async function handleIncomingMessage(
     typicalSellPrice: i.typicalSellPrice,
   }))
 
-  // 4. Build NLP context + parse intent
   const userContext: UserContext = {
     tenantId: tenant.id,
     userPhone: phone,
@@ -92,18 +89,18 @@ export async function handleIncomingMessage(
     tenantId: tenant.id,
     action: intent.action,
     confidence: intent.confidence,
-    needsClarification: intent.needsClarification,
+    resolution: intent.resolution,
+    itemCount: intent.items.length,
   })
 
-  // 5. Route to business module
   let reply: string
 
   try {
-    if (intent.needsClarification || intent.action === 'unknown') {
+    if (intent.resolution === 'clarify' || intent.resolution === 'reject' || intent.action === 'unknown') {
       reply =
         intent.clarificationQuestion ??
         "Sorry, I didn't understand that.\nTry: 'sold 2 sugar at 6500' or 'bought 10 flour at 70k each'"
-      if (intent.action === 'sale' || intent.action === 'purchase' || intent.action === 'expense') {
+      if (intent.resolution === 'clarify' && (intent.action === 'sale' || intent.action === 'purchase' || intent.action === 'expense')) {
         await createDraft(tenant.id, {
           userPhone: phone,
           action: intent.action,
@@ -113,7 +110,7 @@ export async function handleIncomingMessage(
         })
       }
     } else if (intent.action === 'sale') {
-      reply = await handleSaleIntent(tenant.id, phone, intent, inventoryItems)
+      reply = await handleSaleIntent(tenant.id, phone, intent)
     } else if (intent.action === 'purchase') {
       reply = await handlePurchaseIntent(tenant.id, phone, intent, inventoryItems)
     } else if (intent.action === 'stock_check') {
@@ -123,7 +120,7 @@ export async function handleIncomingMessage(
     } else if (intent.action === 'report') {
       reply = await handleReport(tenant.id)
     } else if (intent.action === 'customer_add') {
-      reply = await handleCustomerAdd(tenant.id, phone, intent)
+      reply = await handleCustomerAdd(tenant.id, intent)
     } else if (intent.action === 'supplier_add') {
       reply = await handleSupplierAdd(tenant.id, intent)
     } else if (intent.action === 'expense') {
@@ -132,6 +129,8 @@ export async function handleIncomingMessage(
       reply = await handleMarketing(tenant.id, phone, intent, tenant.businessName)
     } else if (intent.action === 'receipt') {
       reply = await handleReceipt(tenant.id, intent)
+    } else if (intent.action === 'subscription') {
+      reply = 'Subscription request received. We will show your plan options next.'
     } else {
       reply =
         "I didn't catch that. Try:\n• 'sold 2 sugar at 6500'\n• 'bought 5 flour 70k each'\n• 'stock check'\n• 'report'"
@@ -145,10 +144,8 @@ export async function handleIncomingMessage(
         : 'Something went wrong. Your data is safe. Please try again.'
   }
 
-  // 6. Send reply
   await sendTextMessage(phone, reply)
 
-  // 7. Save interaction to context (RLS-scoped, non-blocking)
   withTenant(tenant.id, (tx) =>
     saveInteractionPair(tx, tenant.id, phone, messageText, reply, intent.action, contextRecord.interactionLog)
   ).catch((err: unknown) => {
@@ -163,45 +160,70 @@ export async function handleIncomingMessage(
   })
 }
 
-// -- Action handlers ----------------------------------------------------------
+function firstLine(intent: ParsedIntent): ParsedLineItem | null {
+  return intent.items[0] ?? null
+}
+
+function lineItemName(line: ParsedLineItem | null): string | null {
+  return line?.item?.trim() || line?.itemNormalized?.trim() || null
+}
+
+function parsedLinePrices(line: ParsedLineItem): { unitPrice: number; totalPrice: number } | null {
+  if (!line.qty || line.qty <= 0) return null
+  if (line.unitPrice && line.totalPrice) return { unitPrice: line.unitPrice, totalPrice: line.totalPrice }
+  return null
+}
+
+function formatSaleLines(lines: { itemName: string; qty: number; unitPrice: number; totalPrice: number }[]): string {
+  return lines
+    .map((line) =>
+      line.qty === 1
+        ? `${line.qty} ${line.itemName} ${formatUGXShort(line.totalPrice)}`
+        : `${line.qty} ${line.itemName} @${formatUGXShort(line.unitPrice)}`
+    )
+    .join(', ')
+}
 
 async function handleSaleIntent(
   tenantId: string,
   recordedBy: string,
-  intent: ParsedIntent,
-  inventory: InventoryItem[]
+  intent: ParsedIntent
 ): Promise<string> {
-  if (!intent.item) return "Which item did you sell? Try: 'sold 2 sugar at 6500'"
-  if (!intent.qty) return `How many ${intent.item} did you sell?`
-  if (!intent.unitPrice && !intent.totalPrice) return `What was the price for ${intent.item}?`
+  if (intent.items.length === 0) return "Which item did you sell? Try: 'sold 2 sugar at 6500'"
 
-  const qty = intent.qty
-  const unitPrice = intent.unitPrice ?? Math.round((intent.totalPrice ?? 0) / qty)
-  const totalPrice = intent.totalPrice ?? unitPrice * qty
-  const itemName = intent.item
+  const saleItems = []
+  for (const line of intent.items) {
+    const itemName = lineItemName(line)
+    if (!itemName) return "Which item did you sell? Try: 'sold 2 sugar at 6500'"
+    if (!line.qty) return `How many ${itemName} did you sell?`
+    const prices = parsedLinePrices(line)
+    if (!prices) return `What was the price for ${itemName}?`
+
+    saleItems.push({
+      itemId: line.matchedItemId ?? undefined,
+      itemName,
+      qty: line.qty,
+      unit: line.unit ?? undefined,
+      unitPrice: prices.unitPrice,
+      totalPrice: prices.totalPrice,
+    })
+  }
 
   const result = await createSaleRecord(tenantId, {
-    itemName,
-    qty,
-    unitPrice,
-    totalPrice,
+    items: saleItems,
     source: 'whatsapp',
     recordedBy,
     notes: intent.notes ?? undefined,
   })
 
-  const { sale, stockRemaining, isLowStock } = result
-  const unit =
-    inventory.find((i) => i.nameNormalized === (intent.itemNormalized ?? itemName.toLowerCase()))?.unit ?? 'units'
-
-  let reply =
-    `✅ Sale recorded\n` +
-    `${sale.itemName} × ${sale.qty} @ ${formatUGXShort(sale.unitPrice)}\n` +
-    `Total: ${formatUGX(sale.totalPrice)}\n` +
-    `Stock left: ${stockRemaining} ${unit}`
-
-  if (isLowStock) reply += `\n⚠️ Low stock alert!`
-  if (intent.anomaly && intent.anomalyReason) reply += `\n\nNote: ${intent.anomalyReason}`
+  let reply = `✅ ${formatSaleLines(result.sale.lines)}. Total ${formatUGX(result.sale.totalPrice)}`
+  const lowStock = result.stockLines.find((line) => line.isLowStock)
+  if (lowStock && reply.length < 250) {
+    reply += `. Low: ${lowStock.itemName} ${lowStock.stockRemaining} ${lowStock.unit}`
+  }
+  const anomaly = intent.items.find((line) => line.anomaly && line.anomalyReason)
+  if (anomaly?.anomalyReason && reply.length < 240) reply += `. Note: ${anomaly.anomalyReason}`
+  if (intent.resolution === 'confirm_default' && reply.length < 270) reply += '. Reply NO to fix'
 
   return reply
 }
@@ -212,20 +234,18 @@ async function handlePurchaseIntent(
   intent: ParsedIntent,
   inventory: InventoryItem[]
 ): Promise<string> {
-  if (!intent.item) return "What did you buy? Try: 'bought 10 sugar at 5000 each'"
-  if (!intent.qty) return `How many ${intent.item} did you buy?`
-  if (!intent.unitPrice && !intent.totalPrice) return `What was the price for ${intent.item}?`
-
-  const qty = intent.qty
-  const unitPrice = intent.unitPrice ?? Math.round((intent.totalPrice ?? 0) / qty)
-  const totalPrice = intent.totalPrice ?? unitPrice * qty
-  const itemName = intent.item
+  const line = firstLine(intent)
+  const itemName = lineItemName(line)
+  if (!line || !itemName) return "What did you buy? Try: 'bought 10 sugar at 5000 each'"
+  if (!line.qty) return `How many ${itemName} did you buy?`
+  const prices = parsedLinePrices(line)
+  if (!prices) return `What was the price for ${itemName}?`
 
   const result = await createPurchaseRecord(tenantId, {
     itemName,
-    qty,
-    unitPrice,
-    totalPrice,
+    qty: line.qty,
+    unitPrice: prices.unitPrice,
+    totalPrice: prices.totalPrice,
     supplierName: intent.supplierName ?? undefined,
     source: 'whatsapp',
     recordedBy,
@@ -234,7 +254,7 @@ async function handlePurchaseIntent(
 
   const { purchase, stockAfter } = result
   const unit =
-    inventory.find((i) => i.nameNormalized === (intent.itemNormalized ?? itemName.toLowerCase()))?.unit ?? 'units'
+    inventory.find((i) => i.nameNormalized === (line.itemNormalized ?? itemName.toLowerCase()))?.unit ?? 'units'
 
   return (
     `✅ Purchase recorded\n` +
@@ -250,16 +270,17 @@ async function handleStockCheck(
   intent: ParsedIntent,
   inventory: InventoryItem[]
 ): Promise<string> {
-  if (intent.item ?? intent.itemNormalized) {
-    const searchKey = (intent.itemNormalized ?? intent.item ?? '').toLowerCase()
+  const line = firstLine(intent)
+  const searchKey = (line?.itemNormalized ?? line?.item ?? '').toLowerCase()
+  if (searchKey) {
     const target = inventory.find(
-      (i) => i.nameNormalized === searchKey || i.name.toLowerCase().includes(searchKey)
+      (i) => i.nameNormalized === searchKey || i.aliases.some((alias) => alias.toLowerCase() === searchKey)
     )
     if (target) {
       const status = target.qtyInStock <= target.lowStockThreshold ? '⚠️ LOW' : '✅'
       return `📦 ${target.name}: ${target.qtyInStock} ${target.unit} ${status}`
     }
-    return `"${intent.item}" not found in inventory. Add it with: add item ${intent.item}`
+    return `"${line?.item ?? searchKey}" not found in inventory. Add it with: add item ${line?.item ?? searchKey}`
   }
 
   const lowStock = await getLowStockItems(tenantId)
@@ -280,14 +301,15 @@ async function handleStockCheck(
 }
 
 async function handleAddItem(tenantId: string, intent: ParsedIntent): Promise<string> {
-  const name = intent.item
-  if (!name) return "What item do you want to add?\nTry: 'add item gumboots, qty 20, sell price 35000'"
+  const line = firstLine(intent)
+  const name = lineItemName(line)
+  if (!line || !name) return "What item do you want to add?\nTry: 'add item gumboots, qty 20, sell price 35000'"
 
   const item = await addItem(tenantId, {
     name,
-    unit: intent.unit ?? 'piece',
-    qtyInStock: intent.qty ?? 0,
-    typicalSellPrice: intent.unitPrice ?? intent.totalPrice ?? undefined,
+    unit: line.unit ?? 'piece',
+    qtyInStock: line.qty ?? 0,
+    typicalSellPrice: line.unitPrice ?? line.totalPrice ?? undefined,
   })
 
   return (
@@ -298,9 +320,7 @@ async function handleAddItem(tenantId: string, intent: ParsedIntent): Promise<st
 }
 
 async function handleReport(tenantId: string): Promise<string> {
-  // Two independent services, each opens its own withTenant -> safe to parallelize.
   const [summary, inventory] = await Promise.all([getTodaySummary(tenantId), listItems(tenantId)])
-
   const revenue = summary.totalRevenue > 0 ? formatUGX(summary.totalRevenue) : 'UGX 0'
 
   return (
@@ -314,7 +334,6 @@ async function handleReport(tenantId: string): Promise<string> {
 
 async function handleCustomerAdd(
   tenantId: string,
-  recordedBy: string,
   intent: ParsedIntent
 ): Promise<string> {
   if (!intent.customerName && !intent.customerPhone) {
@@ -329,7 +348,6 @@ async function handleCustomerAdd(
 
   const name = customer.name ?? intent.customerName ?? 'Customer'
   const phone = customer.phone ?? intent.customerPhone ?? ''
-
   const isExisting = Math.abs(customer.createdAt.getTime() - customer.updatedAt.getTime()) > 1000
   if (isExisting) {
     return `${name} is already in your customer records${phone ? ` (${phone})` : ''}`
@@ -368,11 +386,12 @@ async function handleSupplierAdd(tenantId: string, intent: ParsedIntent): Promis
 }
 
 async function handleExpense(tenantId: string, intent: ParsedIntent): Promise<string> {
-  const name = intent.expenseName ?? intent.item
+  const line = firstLine(intent)
+  const name = intent.expenseName ?? lineItemName(line)
   if (!name) return "What expense did you pay?\nTry: 'paid rent 500k' or 'electricity 150,000'"
-  if (!intent.totalPrice && !intent.unitPrice) return `How much was the ${name}? Try: 'paid ${name} 500k'`
 
-  const amount = intent.totalPrice ?? intent.unitPrice ?? 0
+  const amount = line?.totalPrice ?? line?.unitPrice ?? 0
+  if (!amount) return `How much was the ${name}? Try: 'paid ${name} 500k'`
 
   const { expense, isNew } = await recordExpense(tenantId, {
     name,
@@ -392,11 +411,11 @@ async function handleExpense(tenantId: string, intent: ParsedIntent): Promise<st
 
 async function handleMarketing(
   tenantId: string,
-  _recordedBy: string,
+  recordedBy: string,
   intent: ParsedIntent,
   businessName: string
 ): Promise<string> {
-  const prompt = intent.notes ?? intent.item
+  const prompt = intent.notes ?? lineItemName(firstLine(intent))
   if (!prompt) {
     return "What message do you want to send?\nTry: 'send customers: 20% off sugar this weekend only!'"
   }
@@ -410,8 +429,7 @@ async function handleMarketing(
     )
   }
 
-  await sendBroadcast(tenantId, message, _recordedBy)
-
+  await sendBroadcast(tenantId, message, recordedBy)
   const preview = message.length > 100 ? message.slice(0, 97) + '...' : message
 
   return (
@@ -456,17 +474,17 @@ async function handleReceipt(tenantId: string, intent: ParsedIntent): Promise<st
     intent.period === 'week'
       ? 'this week'
       : intent.period === 'month'
-      ? 'this month'
-      : intent.period === 'yesterday'
-      ? 'yesterday'
-      : 'today'
+        ? 'this month'
+        : intent.period === 'yesterday'
+          ? 'yesterday'
+          : 'today'
 
-  const lines = sales.map((s) => `• ${s.itemName} ×${s.qty} = ${formatUGX(s.totalPrice)}`)
+  const lines = sales.map((s) => `• ${formatSaleLines(s.lines)} = ${formatUGX(s.totalPrice)}`)
   const grandTotal = sales.reduce((sum, s) => sum + s.totalPrice, 0)
   const more = total > 5 ? `\n+${total - 5} more sales` : ''
 
   return (
-    `🧧 Recent sales (${periodLabel})\n` +
+    `🧾 Recent sales (${periodLabel})\n` +
     `─────────\n` +
     lines.join('\n') +
     more +

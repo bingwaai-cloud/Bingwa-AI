@@ -1,11 +1,13 @@
-import type { Prisma, Sale } from '@prisma/client'
+import type { Prisma, Sale, SaleLineItem as PrismaSaleLineItem } from '@prisma/client'
 
 /**
  * Sales live in the public schema, keyed by tenant_id (row-level multi-tenancy).
- * Financial records are NEVER hard-deleted -- soft delete only.
- * All functions run on a tenant-scoped transaction client `tx` from withTenant().
+ * The legacy item/qty/price columns on sales remain as a compatibility snapshot;
+ * sale_line_items is the line-level source for multi-item sales.
  */
 export type { Sale }
+export type SaleLineItem = PrismaSaleLineItem
+export type SaleWithLines = Sale & { lines: SaleLineItem[] }
 
 export interface CreateSaleInput {
   tenantId: string
@@ -18,6 +20,17 @@ export interface CreateSaleInput {
   recordedBy?: string | null
   source?: string
   notes?: string | null
+}
+
+export interface CreateSaleLineItemInput {
+  tenantId: string
+  saleId: string
+  itemId?: string | null
+  itemName: string
+  qty: number
+  unit: string
+  unitPrice: number
+  totalPrice: number
 }
 
 export async function createSale(
@@ -40,12 +53,77 @@ export async function createSale(
   })
 }
 
+export async function createSaleLineItems(
+  tx: Prisma.TransactionClient,
+  lines: CreateSaleLineItemInput[]
+): Promise<SaleLineItem[]> {
+  const saved: SaleLineItem[] = []
+  for (const line of lines) {
+    saved.push(await tx.saleLineItem.create({
+      data: {
+        tenantId: line.tenantId,
+        saleId: line.saleId,
+        itemId: line.itemId ?? null,
+        itemName: line.itemName,
+        qty: line.qty,
+        unit: line.unit,
+        unitPrice: line.unitPrice,
+        totalPrice: line.totalPrice,
+      },
+    }))
+  }
+  return saved
+}
+
+function synthesizeLegacyLine(sale: Sale): SaleLineItem {
+  return {
+    id: sale.id,
+    tenantId: sale.tenantId,
+    saleId: sale.id,
+    itemId: sale.itemId,
+    itemName: sale.itemName,
+    qty: sale.qty,
+    unit: 'piece',
+    unitPrice: sale.unitPrice,
+    totalPrice: sale.totalPrice,
+    createdAt: sale.createdAt,
+    updatedAt: sale.updatedAt,
+    deletedAt: sale.deletedAt,
+  }
+}
+
+async function attachLinesToSales(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  sales: Sale[]
+): Promise<SaleWithLines[]> {
+  if (sales.length === 0) return []
+  const saleIds = sales.map((sale) => sale.id)
+  const lines = await tx.saleLineItem.findMany({
+    where: { tenantId, saleId: { in: saleIds }, deletedAt: null },
+    orderBy: { createdAt: 'asc' },
+  })
+  const bySaleId = new Map<string, SaleLineItem[]>()
+  for (const line of lines) {
+    const current = bySaleId.get(line.saleId) ?? []
+    current.push(line)
+    bySaleId.set(line.saleId, current)
+  }
+  return sales.map((sale) => ({
+    ...sale,
+    lines: bySaleId.get(sale.id) ?? [synthesizeLegacyLine(sale)],
+  }))
+}
+
 export async function findSaleById(
   tx: Prisma.TransactionClient,
   tenantId: string,
   saleId: string
-): Promise<Sale | null> {
-  return tx.sale.findFirst({ where: { id: saleId, tenantId, deletedAt: null } })
+): Promise<SaleWithLines | null> {
+  const sale = await tx.sale.findFirst({ where: { id: saleId, tenantId, deletedAt: null } })
+  if (!sale) return null
+  const [withLines] = await attachLinesToSales(tx, tenantId, [sale])
+  return withLines ?? null
 }
 
 export interface SaleFilters {
@@ -57,7 +135,7 @@ export interface SaleFilters {
 }
 
 export interface SalePage {
-  sales: Sale[]
+  sales: SaleWithLines[]
   total: number
   page: number
   perPage: number
@@ -74,15 +152,29 @@ export async function findSales(
   const from = filters.from ?? new Date(0)
   const to = filters.to ?? new Date()
 
+  let matchingLineSaleIds: string[] = []
+  if (filters.itemId) {
+    const lineMatches = await tx.saleLineItem.findMany({
+      where: { tenantId, itemId: filters.itemId, deletedAt: null },
+      select: { saleId: true },
+    })
+    matchingLineSaleIds = [...new Set(lineMatches.map((line) => line.saleId))]
+  }
+
   const where: Prisma.SaleWhereInput = {
     tenantId,
     deletedAt: null,
     createdAt: { gte: from, lte: to },
-    ...(filters.itemId ? { itemId: filters.itemId } : {}),
+    ...(filters.itemId
+      ? {
+          OR: [
+            { itemId: filters.itemId },
+            ...(matchingLineSaleIds.length > 0 ? [{ id: { in: matchingLineSaleIds } }] : []),
+          ],
+        }
+      : {}),
   }
 
-  // Sequential (not Promise.all): a Prisma interactive transaction runs on one
-  // connection and does not support concurrent queries.
   const sales = await tx.sale.findMany({
     where,
     orderBy: { createdAt: 'desc' },
@@ -91,7 +183,7 @@ export async function findSales(
   })
   const total = await tx.sale.count({ where })
 
-  return { sales, total, page, perPage }
+  return { sales: await attachLinesToSales(tx, tenantId, sales), total, page, perPage }
 }
 
 export async function getDailySummary(
@@ -115,13 +207,23 @@ export async function softDeleteSale(
   tx: Prisma.TransactionClient,
   tenantId: string,
   saleId: string
-): Promise<Sale | null> {
+): Promise<SaleWithLines | null> {
+  const deletedAt = new Date()
+  const existing = await findSaleById(tx, tenantId, saleId)
+  if (!existing) return null
+
   const res = await tx.sale.updateMany({
     where: { id: saleId, tenantId, deletedAt: null },
-    data: { deletedAt: new Date() },
+    data: { deletedAt },
   })
   if (res.count === 0) return null
-  return tx.sale.findFirst({ where: { id: saleId, tenantId } })
+
+  await tx.saleLineItem.updateMany({
+    where: { saleId, tenantId, deletedAt: null },
+    data: { deletedAt },
+  })
+
+  return { ...existing, deletedAt, lines: existing.lines.map((line) => ({ ...line, deletedAt })) }
 }
 
 export async function insertPriceHistory(
@@ -175,5 +277,4 @@ export async function createReceiptForSale(
   })
 }
 
-// Re-exported from the central util (CLAUDE.md: one source of truth).
 export { insertAuditLog, type AuditLogEntry } from '../utils/audit.js'

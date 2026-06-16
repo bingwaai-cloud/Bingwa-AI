@@ -1,9 +1,10 @@
 import { AppError, ErrorCodes } from '../utils/AppError.js'
 import { logger } from '../utils/logger.js'
 import { withTenant } from '../db.js'
-import type { Prisma } from '@prisma/client'
+import type { Item, Prisma } from '@prisma/client'
 import {
   createSale,
+  createSaleLineItems,
   findSaleById,
   findSales,
   getDailySummary,
@@ -14,7 +15,8 @@ import {
   type CreateSaleInput,
   type SaleFilters,
   type SalePage,
-  type Sale,
+  type SaleLineItem,
+  type SaleWithLines,
 } from '../repositories/salesRepository.js'
 import {
   findItemById,
@@ -25,12 +27,17 @@ import {
 } from '../repositories/itemRepository.js'
 import { linkCustomerToSale } from './customersService.js'
 
-export interface CreateSaleParams {
+export interface CreateSaleLineParams {
   itemId?: string
   itemName: string
   qty: number
+  unit?: string
   unitPrice: number
   totalPrice: number
+}
+
+export interface CreateSaleParams {
+  items: CreateSaleLineParams[]
   customerPhone?: string
   customerName?: string
   recordedBy?: string
@@ -39,23 +46,151 @@ export interface CreateSaleParams {
   notes?: string
 }
 
+export interface SaleStockLine {
+  itemId: string | null
+  itemName: string
+  stockRemaining: number
+  unit: string
+  isLowStock: boolean
+  lowStockThreshold: number
+}
+
 export interface SaleResult {
-  sale: Sale
+  sale: SaleWithLines
   stockRemaining: number
   isLowStock: boolean
   lowStockThreshold: number
   itemUnit: string
+  stockLines: SaleStockLine[]
 }
 
-/**
- * Record a new sale -- runs as ONE atomic tenant transaction (withTenant):
- * sale + stock decrement + price history + typical-price + audit + receipt all
- * commit or roll back together (CLAUDE.md: audit in same tx as financial write).
- *
- * Deviation from the pre-migration code (flagged for review): customer linking,
- * stock restore on cancel, audit and receipt are now INSIDE the transaction, so a
- * failure in any rolls the whole sale back, rather than being best-effort.
- */
+interface ResolvedSaleLine {
+  item: Item | null
+  itemId: string | null
+  itemName: string
+  qty: number
+  unit: string
+  unitPrice: number
+  totalPrice: number
+}
+
+function assertPositiveInteger(value: number, label: string, itemName: string): void {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, `${itemName}: ${label} must be a positive integer`, 400)
+  }
+}
+
+function validateLine(line: CreateSaleLineParams): void {
+  const itemName = line.itemName.trim()
+  if (!itemName) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Sale line requires itemName', 400)
+  }
+  assertPositiveInteger(line.qty, 'qty', itemName)
+  assertPositiveInteger(line.unitPrice, 'unitPrice', itemName)
+  assertPositiveInteger(line.totalPrice, 'totalPrice', itemName)
+
+  const expectedTotal = line.unitPrice * line.qty
+  if (expectedTotal !== line.totalPrice) {
+    throw new AppError(
+      ErrorCodes.VALIDATION_ERROR,
+      `${itemName}: price mismatch ${line.qty} x UGX ${line.unitPrice.toLocaleString()} != UGX ${line.totalPrice.toLocaleString()}`,
+      400
+    )
+  }
+}
+
+async function resolveSaleLines(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  lines: CreateSaleLineParams[]
+): Promise<ResolvedSaleLine[]> {
+  if (lines.length === 0) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Sale requires at least one line item', 400)
+  }
+
+  const resolved: ResolvedSaleLine[] = []
+  for (const line of lines) {
+    validateLine(line)
+    const item = line.itemId
+      ? await findItemById(tx, tenantId, line.itemId)
+      : await findItemByName(tx, tenantId, line.itemName.toLowerCase().trim())
+
+    if (!item && line.itemId) {
+      throw new AppError(ErrorCodes.ITEM_NOT_FOUND, `${line.itemName}: item not found in inventory`, 404)
+    }
+
+    resolved.push({
+      item,
+      itemId: item?.id ?? line.itemId ?? null,
+      itemName: item?.name ?? line.itemName.trim(),
+      qty: line.qty,
+      unit: item?.unit ?? line.unit ?? 'piece',
+      unitPrice: line.unitPrice,
+      totalPrice: line.totalPrice,
+    })
+  }
+
+  const requestedByItem = new Map<string, { item: Item; qty: number }>()
+  for (const line of resolved) {
+    if (!line.item) continue
+    const current = requestedByItem.get(line.item.id)
+    requestedByItem.set(line.item.id, {
+      item: line.item,
+      qty: (current?.qty ?? 0) + line.qty,
+    })
+  }
+
+  for (const { item, qty } of requestedByItem.values()) {
+    if (item.qtyInStock < qty) {
+      throw new AppError(
+        ErrorCodes.INSUFFICIENT_STOCK,
+        `Only ${item.qtyInStock} ${item.unit} of ${item.name} left in stock`,
+        422
+      )
+    }
+  }
+
+  return resolved
+}
+
+function saleHeaderFromLines(
+  tenantId: string,
+  lines: ResolvedSaleLine[],
+  params: CreateSaleParams,
+  customerId: string | null,
+  grandTotal: number
+): CreateSaleInput {
+  if (lines.length === 1) {
+    const line = lines[0]!
+    return {
+      tenantId,
+      itemId: line.itemId,
+      itemName: line.itemName,
+      qty: line.qty,
+      unitPrice: line.unitPrice,
+      totalPrice: line.totalPrice,
+      customerId,
+      recordedBy: params.recordedBy ?? null,
+      source: params.source ?? 'api',
+      notes: params.notes ?? null,
+    }
+  }
+
+  const first = lines[0]!
+  return {
+    tenantId,
+    itemId: null,
+    itemName: `${first.itemName} +${lines.length - 1} items`,
+    qty: 1,
+    unitPrice: grandTotal,
+    totalPrice: grandTotal,
+    customerId,
+    recordedBy: params.recordedBy ?? null,
+    source: params.source ?? 'api',
+    notes: params.notes ?? null,
+  }
+}
+
 export async function createSaleRecord(
   tenantId: string,
   params: CreateSaleParams
@@ -63,42 +198,14 @@ export async function createSaleRecord(
   return withTenant(tenantId, (tx) => createSaleRecordInTransaction(tx, tenantId, params))
 }
 
-/**
- * Transaction-aware sale creation used when another state change must commit
- * atomically with the sale (for example, confirmed draft -> committed).
- */
 export async function createSaleRecordInTransaction(
   tx: Prisma.TransactionClient,
   tenantId: string,
   params: CreateSaleParams
 ): Promise<SaleResult> {
-  // Validate price arithmetic before any writes in this transaction.
-  const expectedTotal = params.unitPrice * params.qty
-  if (Math.abs(expectedTotal - params.totalPrice) > 1) {
-    throw new AppError(
-      ErrorCodes.VALIDATION_ERROR,
-      `Price mismatch: ${params.qty} x UGX ${params.unitPrice.toLocaleString()} != UGX ${params.totalPrice.toLocaleString()}`,
-      400
-    )
-  }
+  const lines = await resolveSaleLines(tx, tenantId, params.items)
+  const grandTotal = lines.reduce((sum, line) => sum + line.totalPrice, 0)
 
-  // Resolve item (by id or normalized name)
-  const item = params.itemId
-    ? await findItemById(tx, tenantId, params.itemId)
-    : await findItemByName(tx, tenantId, params.itemName.toLowerCase().trim())
-
-  if (!item && params.itemId) {
-    throw new AppError(ErrorCodes.ITEM_NOT_FOUND, 'Item not found in inventory', 404)
-  }
-  if (item && item.qtyInStock < params.qty) {
-    throw new AppError(
-      ErrorCodes.INSUFFICIENT_STOCK,
-      `Only ${item.qtyInStock} ${item.unit} of ${item.name} left in stock`,
-      422
-    )
-  }
-
-  // Auto-link customer by phone (same transaction)
   let customerId: string | null = null
   if (params.customerPhone) {
     customerId = await linkCustomerToSale(
@@ -106,46 +213,84 @@ export async function createSaleRecordInTransaction(
       tenantId,
       params.customerPhone,
       params.customerName ?? null,
-      params.totalPrice
+      grandTotal
     )
   }
 
-  const saleInput: CreateSaleInput = {
-    tenantId,
-    itemId: item?.id ?? params.itemId ?? null,
-    itemName: item?.name ?? params.itemName,
-    qty: params.qty,
-    unitPrice: params.unitPrice,
-    totalPrice: params.totalPrice,
-    customerId,
-    recordedBy: params.recordedBy ?? null,
-    source: params.source ?? 'api',
-    notes: params.notes ?? null,
-  }
+  const sale = await createSale(tx, saleHeaderFromLines(tenantId, lines, params, customerId, grandTotal))
+  const saleLines = await createSaleLineItems(
+    tx,
+    lines.map((line) => ({
+      tenantId,
+      saleId: sale.id,
+      itemId: line.itemId,
+      itemName: line.itemName,
+      qty: line.qty,
+      unit: line.unit,
+      unitPrice: line.unitPrice,
+      totalPrice: line.totalPrice,
+    }))
+  )
 
-  const sale = await createSale(tx, saleInput)
-  logger.info({ event: 'sale_created', tenantId, saleId: sale.id, itemName: sale.itemName, qty: sale.qty, totalPrice: sale.totalPrice })
-
-  let stockRemaining = item?.qtyInStock ?? 0
-  let isLowStock = false
-  const lowStockThreshold = item?.lowStockThreshold ?? 5
-
-  if (item) {
-    stockRemaining = await decrementStock(tx, tenantId, item.id, params.qty)
-    isLowStock = stockRemaining <= lowStockThreshold
-    if (isLowStock) {
-      logger.warn({ event: 'low_stock_alert', tenantId, itemId: item.id, itemName: item.name, qtyInStock: stockRemaining, threshold: lowStockThreshold })
+  const stockLines: SaleStockLine[] = []
+  for (const line of lines) {
+    if (!line.item) {
+      stockLines.push({
+        itemId: null,
+        itemName: line.itemName,
+        stockRemaining: 0,
+        unit: line.unit,
+        isLowStock: false,
+        lowStockThreshold: 5,
+      })
+      continue
     }
+
+    const stockRemaining = await decrementStock(tx, tenantId, line.item.id, line.qty)
+    const isLowStock = stockRemaining <= line.item.lowStockThreshold
+    stockLines.push({
+      itemId: line.item.id,
+      itemName: line.item.name,
+      stockRemaining,
+      unit: line.item.unit,
+      isLowStock,
+      lowStockThreshold: line.item.lowStockThreshold,
+    })
+
+    if (isLowStock) {
+      logger.warn({
+        event: 'low_stock_alert',
+        tenantId,
+        itemId: line.item.id,
+        itemName: line.item.name,
+        qtyInStock: stockRemaining,
+        threshold: line.item.lowStockThreshold,
+      })
+    }
+
     await insertPriceHistory(tx, {
       tenantId,
-      itemId: item.id,
+      itemId: line.item.id,
       transactionType: 'sale',
-      unitPrice: params.unitPrice,
-      totalPrice: params.totalPrice,
-      qty: params.qty,
+      unitPrice: line.unitPrice,
+      totalPrice: line.totalPrice,
+      qty: line.qty,
     })
-    await updateTypicalPrice(tx, tenantId, item.id, 'sell', params.unitPrice)
+    await updateTypicalPrice(tx, tenantId, line.item.id, 'sell', line.unitPrice)
   }
+
+  const receiptItems = saleLines.map((line) => ({
+    name: line.itemName,
+    qty: line.qty,
+    unitPrice: line.unitPrice,
+    totalPrice: line.totalPrice,
+  }))
+  const auditLines = saleLines.map((line) => ({
+    itemName: line.itemName,
+    qty: line.qty,
+    unitPrice: line.unitPrice,
+    totalPrice: line.totalPrice,
+  }))
 
   await insertAuditLog(tx, {
     tenantId,
@@ -153,21 +298,45 @@ export async function createSaleRecordInTransaction(
     action: 'sale.created',
     entityType: 'sale',
     entityId: sale.id,
-    newValue: { itemName: sale.itemName, qty: sale.qty, unitPrice: sale.unitPrice, totalPrice: sale.totalPrice },
+    newValue: { totalPrice: grandTotal, lines: auditLines },
     source: params.source ?? 'api',
   })
 
   await createReceiptForSale(tx, {
     tenantId,
     saleId: sale.id,
-    items: [{ name: sale.itemName, qty: sale.qty, unitPrice: sale.unitPrice, totalPrice: sale.totalPrice }],
-    totalUgx: sale.totalPrice,
+    customerId,
+    items: receiptItems,
+    totalUgx: grandTotal,
   })
 
-  return { sale, stockRemaining, isLowStock, lowStockThreshold, itemUnit: item?.unit ?? 'units' }
+  const firstStock = stockLines[0] ?? {
+    stockRemaining: 0,
+    isLowStock: false,
+    lowStockThreshold: 5,
+    unit: lines[0]?.unit ?? 'units',
+  }
+  const saleWithLines: SaleWithLines = { ...sale, lines: saleLines }
+
+  logger.info({
+    event: 'sale_created',
+    tenantId,
+    saleId: sale.id,
+    itemCount: saleLines.length,
+    totalPrice: grandTotal,
+  })
+
+  return {
+    sale: saleWithLines,
+    stockRemaining: firstStock.stockRemaining,
+    isLowStock: stockLines.some((line) => line.isLowStock),
+    lowStockThreshold: firstStock.lowStockThreshold,
+    itemUnit: firstStock.unit,
+    stockLines,
+  }
 }
 
-export async function getSaleById(tenantId: string, saleId: string): Promise<Sale> {
+export async function getSaleById(tenantId: string, saleId: string): Promise<SaleWithLines> {
   const sale = await withTenant(tenantId, (tx) => findSaleById(tx, tenantId, saleId))
   if (!sale) {
     throw new AppError(ErrorCodes.ITEM_NOT_FOUND, 'Sale not found', 404)
@@ -184,19 +353,16 @@ export async function getTodaySummary(
 ): Promise<{ totalRevenue: number; saleCount: number }> {
   const now = new Date()
   const todayStart = new Date(now)
-  todayStart.setUTCHours(0 - 3, 0, 0, 0) // midnight EAT (UTC+3) expressed in UTC
+  todayStart.setUTCHours(0 - 3, 0, 0, 0)
   return withTenant(tenantId, (tx) => getDailySummary(tx, tenantId, todayStart, now))
 }
 
-/**
- * Cancel (soft-delete) a sale and restore stock -- one atomic transaction.
- */
 export async function cancelSale(
   tenantId: string,
   saleId: string,
   recordedBy?: string,
   actorUserId?: string
-): Promise<Sale> {
+): Promise<SaleWithLines> {
   return withTenant(tenantId, async (tx) => {
     const existing = await findSaleById(tx, tenantId, saleId)
     if (!existing) {
@@ -209,8 +375,10 @@ export async function cancelSale(
     }
     logger.info({ event: 'sale_cancelled', tenantId, saleId, recordedBy })
 
-    if (existing.itemId) {
-      await incrementStock(tx, tenantId, existing.itemId, existing.qty)
+    for (const line of existing.lines) {
+      if (line.itemId) {
+        await incrementStock(tx, tenantId, line.itemId, line.qty)
+      }
     }
 
     await insertAuditLog(tx, {
@@ -220,7 +388,15 @@ export async function cancelSale(
       action: 'sale.cancelled',
       entityType: 'sale',
       entityId: saleId,
-      oldValue: { itemName: existing.itemName, qty: existing.qty, totalPrice: existing.totalPrice },
+      oldValue: {
+        totalPrice: existing.totalPrice,
+        lines: existing.lines.map((line) => ({
+          itemName: line.itemName,
+          qty: line.qty,
+          unitPrice: line.unitPrice,
+          totalPrice: line.totalPrice,
+        })),
+      },
       newValue: { deletedAt: new Date().toISOString() },
       source: 'api',
     })

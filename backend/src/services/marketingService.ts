@@ -88,6 +88,10 @@ export async function listBroadcasts(tenantId: string): Promise<Broadcast[]> {
 }
 
 async function generateMarketingMessage(prompt: string, businessName: string): Promise<string> {
+  if (!process.env['ANTHROPIC_API_KEY'] || !process.env['NLP_MODEL']) {
+    return fallbackMarketingMessage(prompt, businessName)
+  }
+
   const client = getClient()
   const systemPrompt = `You are a WhatsApp marketing assistant for ${businessName}, a small business in Uganda.
 Generate a short, friendly WhatsApp message based on the owner's instructions.
@@ -102,16 +106,29 @@ Rules:
 
 Return ONLY the message text, nothing else.`
 
-  const response = await client.messages.create({
-    model: process.env['NLP_MODEL'] ?? 'claude-sonnet-4-5',
-    max_tokens: 150,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: prompt }],
-  })
+  try {
+    const response = await client.messages.create({
+      model: process.env['NLP_MODEL'],
+      max_tokens: 150,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: prompt }],
+    })
 
-  const text = response.content[0]?.type === 'text' ? response.content[0].text.trim() : ''
-  if (!text) throw new AppError(ErrorCodes.INTERNAL_ERROR, 'Failed to generate marketing message', 500)
-  return text.slice(0, 280)
+    const text = response.content[0]?.type === 'text' ? response.content[0].text.trim() : ''
+    if (!text) return fallbackMarketingMessage(prompt, businessName)
+    return text.slice(0, 280)
+  } catch (err) {
+    logger.warn({
+      event: 'marketing_generation_fallback',
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return fallbackMarketingMessage(prompt, businessName)
+  }
+}
+
+function fallbackMarketingMessage(prompt: string, businessName: string): string {
+  const cleaned = prompt.trim().replace(/\s+/g, ' ')
+  return `${cleaned} - ${businessName}`.slice(0, 280)
 }
 
 async function sendBroadcastMessages(

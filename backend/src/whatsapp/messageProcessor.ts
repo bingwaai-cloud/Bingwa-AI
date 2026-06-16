@@ -5,7 +5,7 @@ import { normalizePhone } from '../utils/phone.js'
 import { findTenantByOwnerPhone } from '../repositories/tenantRepository.js'
 import { resolvePendingDraftMessage, type DraftCommitResult } from '../services/draftsService.js'
 import { AppError } from '../utils/AppError.js'
-import { formatUGX } from '../nlp/normalizers.js'
+import { formatUGX, formatUGXShort } from '../nlp/normalizers.js'
 
 // ─── Meta webhook payload types ───────────────────────────────────────────────
 
@@ -148,19 +148,47 @@ export async function processIncomingText(from: string, text: string, messageId:
 
 function formatDraftResolution(result: DraftCommitResult): string {
   const payload = result.draft.payload as Record<string, unknown>
-  const item = typeof payload['item'] === 'string'
-    ? payload['item']
-    : typeof payload['expenseName'] === 'string'
-      ? payload['expenseName']
-      : result.committedEntityType
-  const qty = typeof payload['qty'] === 'number' ? ` x ${payload['qty']}` : ''
-  const total = typeof payload['totalPrice'] === 'number' ? `\nTotal: ${formatUGX(payload['totalPrice'])}` : ''
   const label = result.committedEntityType === 'sale'
     ? 'Sale'
     : result.committedEntityType === 'purchase'
       ? 'Purchase'
       : 'Expense'
-  return `${label} recorded\n${item}${qty}${total}`
+
+  const items = Array.isArray(payload['items'])
+    ? payload['items'].filter((item): item is Record<string, unknown> =>
+        !!item && typeof item === 'object' && !Array.isArray(item)
+      )
+    : [payload]
+
+  if (result.committedEntityType === 'expense') {
+    const name = typeof payload['expenseName'] === 'string'
+      ? payload['expenseName']
+      : typeof items[0]?.['item'] === 'string'
+        ? items[0]['item']
+        : 'Expense'
+    const amount = typeof items[0]?.['totalPrice'] === 'number'
+      ? items[0]['totalPrice']
+      : typeof payload['totalPrice'] === 'number'
+        ? payload['totalPrice']
+        : null
+    return `${label} recorded\n${name}${amount ? `\nTotal: ${formatUGX(amount)}` : ''}`
+  }
+
+  const lines = items.map((item) => {
+    const name = typeof item['item'] === 'string' ? item['item'] : result.committedEntityType
+    const qty = typeof item['qty'] === 'number' ? item['qty'] : 1
+    const unitPrice = typeof item['unitPrice'] === 'number' ? item['unitPrice'] : null
+    const totalPrice = typeof item['totalPrice'] === 'number' ? item['totalPrice'] : null
+    if (unitPrice && qty > 1) return `${qty} ${name} @${formatUGXShort(unitPrice)}`
+    if (totalPrice) return `${qty} ${name} ${formatUGXShort(totalPrice)}`
+    return `${qty} ${name}`
+  })
+  const grandTotal = items.reduce(
+    (sum, item) => sum + (typeof item['totalPrice'] === 'number' ? item['totalPrice'] : 0),
+    0
+  )
+
+  return `${label} recorded\n${lines.join(', ')}${grandTotal > 0 ? `\nTotal: ${formatUGX(grandTotal)}` : ''}`
 }
 
 async function sendNonTextReply(from: string, messageId: string): Promise<void> {

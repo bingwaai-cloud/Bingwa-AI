@@ -90,7 +90,7 @@ describe('Audit rollback — real sale path, audit insert forced to fail', () =>
     const res = await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${token}`)
-      .send({ itemId: ITEM_ID, itemName: 'Sugar', qty: 5, unitPrice: 6500, totalPrice: 32500 })
+      .send({ items: [{ itemId: ITEM_ID, itemName: 'Sugar', qty: 5, unitPrice: 6500, totalPrice: 32500 }] })
 
     expect(res.status).toBeGreaterThanOrEqual(500)         // global handler → 500
     expect(mockedAudit).toHaveBeenCalledTimes(1)           // it really reached the audit step
@@ -107,7 +107,7 @@ describe('Audit rollback — real sale path, audit insert forced to fail', () =>
     const res = await request(app)
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${token}`)
-      .send({ itemId: ITEM_ID, itemName: 'Sugar', qty: 3, unitPrice: 6500, totalPrice: 19500 })
+      .send({ items: [{ itemId: ITEM_ID, itemName: 'Sugar', qty: 3, unitPrice: 6500, totalPrice: 19500 }] })
 
     expect(res.status).toBe(201)
     const logs = await withTenant(TENANT_ID, (tx) => tx.auditLog.findMany({ where: { action: 'sale.created' } }))

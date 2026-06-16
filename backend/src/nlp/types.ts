@@ -19,24 +19,29 @@ export type Action =
 
 export type Period = 'today' | 'yesterday' | 'week' | 'month'
 
-export interface ParsedIntent {
-  action: Action
+export interface ParsedLineItem {
   item: string | null
   itemNormalized: string | null
+  matchedItemId: string | null
   qty: number | null
   unit: string | null
-  unitPrice: number | null    // always UGX integer
-  totalPrice: number | null   // always UGX integer
-  confidence: number          // 0.0 – 1.0
-  needsClarification: boolean
+  unitPrice: number | null
+  totalPrice: number | null
+  anomaly: boolean
+  anomalyReason: string | null
+}
+
+export interface ParsedIntent {
+  action: Action
+  items: ParsedLineItem[]
+  confidence: number
+  resolution: 'commit' | 'confirm_default' | 'clarify' | 'reject'
   clarificationQuestion: string | null
   supplierName: string | null
   customerPhone: string | null
   customerName: string | null
   expenseName: string | null
   period: Period | null
-  anomaly: boolean
-  anomalyReason: string | null
   notes: string | null
 }
 
@@ -55,7 +60,7 @@ export interface InventoryItem {
 export interface Interaction {
   role: 'user' | 'assistant'
   content: string
-  timestamp: string   // ISO 8601
+  timestamp: string
   action?: string
 }
 

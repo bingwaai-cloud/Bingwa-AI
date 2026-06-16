@@ -15,7 +15,7 @@ import {
 } from '../repositories/ordersRepository.js'
 import { findPlatformSupplierById } from '../repositories/suppliersRepository.js'
 import { createPurchase } from '../repositories/purchasesRepository.js'
-import { createSale, insertPriceHistory } from '../repositories/salesRepository.js'
+import { createSale, createSaleLineItems, insertPriceHistory } from '../repositories/salesRepository.js'
 import {
   findItemByName,
   incrementStock,
@@ -167,6 +167,16 @@ export async function acceptOrderById(supplierTenantId: string, orderId: string)
         source: 'platform_order',
         notes: `Platform order ${order.id} -- buyer: ${order.buyerBusinessName}`,
       })
+      await createSaleLineItems(tx, [{
+        tenantId: supplierTenantId,
+        saleId: sale.id,
+        itemId: matchedItem?.id ?? null,
+        itemName: order.itemName,
+        qty: order.qty,
+        unit: matchedItem?.unit ?? 'piece',
+        unitPrice: price,
+        totalPrice: price * order.qty,
+      }])
       if (matchedItem) {
         await insertPriceHistory(tx, {
           tenantId: supplierTenantId,

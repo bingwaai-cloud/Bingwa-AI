@@ -35,7 +35,9 @@ describe('WhatsApp draft-first message processing', () => {
     findTenantByOwnerPhone.mockResolvedValue({ id: 'd1b2c3d4-0000-0000-0000-0000000000a1' })
     resolvePendingDraftMessage.mockResolvedValue({
       draft: {
-        payload: { item: 'Sugar', qty: 2, totalPrice: 13000 },
+        payload: {
+          items: [{ item: 'Sugar', qty: 2, unitPrice: 6500, totalPrice: 13000 }],
+        },
       },
       committedEntityType: 'sale',
       committedEntityId: 'd1b2c3d4-0000-0000-0000-0000000000a2',

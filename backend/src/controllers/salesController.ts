@@ -2,7 +2,7 @@ import { type Request, type Response } from 'express'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/asyncHandler.js'
 import { AppError, ErrorCodes } from '../utils/AppError.js'
-import { formatUGX } from '../nlp/normalizers.js'
+import { formatUGX, formatUGXShort } from '../nlp/normalizers.js'
 import {
   createSaleRecord,
   getSaleById,
@@ -12,19 +12,43 @@ import {
   type SaleResult,
 } from '../services/salesService.js'
 
-// ── Validation schemas ────────────────────────────────────────────────────────
-
-const CreateSaleSchema = z.object({
+const SaleLineSchema = z.object({
   itemId: z.string().uuid().optional(),
   itemName: z.string().min(1).max(255),
   qty: z.number().int().positive().max(1_000_000),
-  unitPrice: z.number().int().positive().max(100_000_000),        // max 100M UGX per unit
-  totalPrice: z.number().int().positive().max(100_000_000_000),   // max 100B UGX total
+  unit: z.string().min(1).max(50).optional(),
+  unitPrice: z.number().int().positive().max(100_000_000),
+  totalPrice: z.number().int().positive().max(100_000_000_000),
+})
+
+function normalizeCreateSaleBody(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+  const body = value as Record<string, unknown>
+  if (Array.isArray(body['items'])) return value
+  if (typeof body['itemName'] !== 'string') return value
+
+  return {
+    ...body,
+    items: [{
+      itemId: body['itemId'],
+      itemName: body['itemName'],
+      qty: body['qty'],
+      unit: body['unit'],
+      unitPrice: body['unitPrice'],
+      totalPrice: body['totalPrice'],
+    }],
+  }
+}
+
+// POST /api/v1/sales contract shared by web, WhatsApp, POS/mobile, and drafts:
+// { items:[{ itemId?, itemName, qty, unit?, unitPrice, totalPrice }], customerPhone?, customerName?, notes?, source? }
+const CreateSaleSchema = z.preprocess(normalizeCreateSaleBody, z.object({
+  items: z.array(SaleLineSchema).min(1).max(100),
   customerPhone: z.string().max(20).optional(),
   customerName: z.string().max(255).optional(),
   notes: z.string().max(1000).optional(),
   source: z.enum(['whatsapp', 'web', 'mobile', 'api']).default('api'),
-})
+}))
 
 const ListSalesSchema = z.object({
   from: z.coerce.date().optional(),
@@ -34,39 +58,32 @@ const ListSalesSchema = z.object({
   perPage: z.coerce.number().int().positive().max(100).default(20),
 })
 
-// ── WhatsApp response formatter ───────────────────────────────────────────────
-
-/**
- * Format a sale result as a WhatsApp plain-text message.
- * Matches the format defined in docs/nlp-spec.md.
- * Kept under 300 characters for conversational replies when possible.
- */
 function formatSaleWhatsApp(result: SaleResult): string {
-  const { sale, stockRemaining, isLowStock, itemUnit } = result
-  const divider = '─────────────────'
+  const { sale, stockLines } = result
+  const lineText = sale.lines
+    .map((line) =>
+      line.qty === 1
+        ? `${line.qty} ${line.itemName} ${formatUGXShort(line.totalPrice)}`
+        : `${line.qty} ${line.itemName} @${formatUGXShort(line.unitPrice)}`
+    )
+    .join(', ')
 
-  const lines = [
-    '✅ Sale recorded!',
-    divider,
-    `Item: ${sale.itemName}`,
-    `Qty: ${sale.qty} ${itemUnit}`,
-    `Unit: ${formatUGX(sale.unitPrice)}`,
-    `Total: ${formatUGX(sale.totalPrice)}`,
-    `Stock left: ${stockRemaining} ${itemUnit}`,
-    divider,
-    'Reply RECEIPT to print',
-  ]
+  let msg = `✅ ${lineText}. Total ${formatUGX(sale.totalPrice)}`
+  if (msg.length > 300 && sale.lines.length > 3) {
+    const shortLines = sale.lines
+      .slice(0, 3)
+      .map((line) => `${line.qty} ${line.itemName}`)
+      .join(', ')
+    msg = `✅ ${shortLines}, +${sale.lines.length - 3} more. Total ${formatUGX(sale.totalPrice)}`
+  }
 
-  let msg = lines.join('\n')
-
-  if (isLowStock) {
-    msg += `\n⚠️ ${sale.itemName} running low — only ${stockRemaining} ${itemUnit} left.`
+  const lowStock = stockLines.find((line) => line.isLowStock)
+  if (lowStock && msg.length < 250) {
+    msg += `. Low: ${lowStock.itemName} ${lowStock.stockRemaining} ${lowStock.unit}`
   }
 
   return msg
 }
-
-// ── Handlers ──────────────────────────────────────────────────────────────────
 
 export const handleCreateSale = asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenantId!
@@ -81,11 +98,7 @@ export const handleCreateSale = asyncHandler(async (req: Request, res: Response)
   }
 
   const result = await createSaleRecord(tenantId, {
-    itemId: parsed.data.itemId,
-    itemName: parsed.data.itemName,
-    qty: parsed.data.qty,
-    unitPrice: parsed.data.unitPrice,
-    totalPrice: parsed.data.totalPrice,
+    items: parsed.data.items,
     customerPhone: parsed.data.customerPhone,
     customerName: parsed.data.customerName,
     notes: parsed.data.notes,
@@ -93,8 +106,6 @@ export const handleCreateSale = asyncHandler(async (req: Request, res: Response)
     actorUserId: req.user?.userId,
   })
 
-  // WhatsApp callers get a plain-text message; all other clients get JSON.
-  // legacy header removal: after 2026-08-15
   const source = req.headers['x-gezi-source'] ?? req.headers['x-bingwa-source']
   if (source === 'whatsapp') {
     res.status(201).json({ message: formatSaleWhatsApp(result) })
@@ -108,6 +119,7 @@ export const handleCreateSale = asyncHandler(async (req: Request, res: Response)
       stockRemaining: result.stockRemaining,
       isLowStock: result.isLowStock,
       itemUnit: result.itemUnit,
+      stockLines: result.stockLines,
     },
   })
 })
@@ -150,8 +162,8 @@ export const handleListSales = asyncHandler(async (req: Request, res: Response) 
   })
 })
 
-export const handleTodaySummary = asyncHandler(async (req: Request, res: Response) => {
-  const tenantId = req.tenantId!
+export const handleTodaySummary = asyncHandler(async (_req: Request, res: Response) => {
+  const tenantId = _req.tenantId!
 
   const summary = await getTodaySummary(tenantId)
 

@@ -42,6 +42,7 @@ module.exports = async function globalSetup() {
     '006_enable_rls.sql',
     '007_add_actor_user_id.sql',
     '008_draft_transactions.sql',
+    '009_sale_line_items.sql',
   ]
 
   const client = new Client({ connectionString: ownerUrl })
