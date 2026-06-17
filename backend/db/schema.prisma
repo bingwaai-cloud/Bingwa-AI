@@ -329,14 +329,16 @@ model User {
 }
 
 model ItemAlias {
-  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId       String    @map("tenant_id") @db.Uuid
-  alias          String    @db.Text
-  itemId         String    @map("item_id") @db.Uuid
-  confirmedCount Int       @default(1) @map("confirmed_count")
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
-  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz()
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String    @map("tenant_id") @db.Uuid
+  alias            String    @db.Text
+  itemId           String    @map("item_id") @db.Uuid
+  confirmedCount   Int       @default(1) @map("confirmed_count")
+  isGlobal         Boolean   @default(false) @map("is_global")
+  globalPromotedAt DateTime? @map("global_promoted_at") @db.Timestamptz()
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz()
 
   @@index([tenantId, alias])
   @@index([itemId])
@@ -360,4 +362,20 @@ model DraftTransaction {
   @@index([tenantId, userPhone, state])
   @@index([tenantId, createdAt])
   @@map("draft_transactions")
+}
+
+model UnknownMessage {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  message      String    @db.Text
+  rawNlpOutput Json?     @map("raw_nlp_output")
+  source       String    @default("whatsapp") @db.VarChar(20)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  reviewedAt   DateTime? @map("reviewed_at") @db.Timestamptz()
+  reviewAction String?   @map("review_action") @db.VarChar(30)
+  corpusCaseId String?   @map("corpus_case_id") @db.VarChar(50)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz()
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("unknown_messages")
 }

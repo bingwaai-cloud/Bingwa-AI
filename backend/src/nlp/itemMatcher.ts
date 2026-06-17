@@ -8,8 +8,9 @@
  * Substring matching is BANNED.  "soap" must not match "soap powder".
  */
 
-import type { Prisma } from '@prisma/client'
+import type { Prisma, PrismaClient } from '@prisma/client'
 import type { InventoryItem } from './types.js'
+import { logger } from '../utils/logger.js'
 
 // ── Seed (global) aliases ──────────────────────────────────────────────────
 // These are shared across all tenants as fallback vocabulary before pg_trgm.
@@ -102,12 +103,13 @@ export async function matchItemFull(
   )
   if (inlineAlias) return { itemId: inlineAlias.id, fuzzy: false, matchedBy: 'exact' }
 
-  // 2. Tenant alias table
-  const aliasRow = await tx.$queryRaw<{ item_id: string }[]>`
-    SELECT item_id FROM public.item_aliases
-    WHERE tenant_id = ${tenantId}::uuid
+  // 2. Tenant alias table (tenant-specific first, then global)
+  const aliasRow = await tx.$queryRaw<{ item_id: string; is_global: boolean }[]>`
+    SELECT item_id, is_global FROM public.item_aliases
+    WHERE (tenant_id = ${tenantId}::uuid OR is_global = TRUE)
       AND lower(alias) = ${normalized}
       AND deleted_at IS NULL
+    ORDER BY is_global ASC, confirmed_count DESC
     LIMIT 1
   `
   if (aliasRow.length > 0 && aliasRow[0]?.item_id) {
@@ -163,6 +165,50 @@ export async function recordAliasMatch(
     DO UPDATE SET confirmed_count = item_aliases.confirmed_count + 1,
                   updated_at = NOW()
   `
+}
+
+// ── Global alias promotion ─────────────────────────────────────────────────
+
+const PROMOTION_THRESHOLD = Number(process.env['ALIAS_PROMOTION_THRESHOLD'] || '5')
+
+/**
+ * Promotes an alias to global when 5+ distinct tenants have confirmed it.
+ * Called fire-and-forget after every alias confirmation write.
+ * Uses sentinel tenant_id = 00000000-0000-0000-0000-000000000000 for global rows.
+ */
+export async function promoteAliasIfThreshold(
+  alias: string,
+  itemId: string,
+  db: PrismaClient
+): Promise<void> {
+  const normalizedAlias = alias.toLowerCase().trim()
+  if (!normalizedAlias) return
+
+  try {
+    const result = await db.$queryRaw<{ distinct_tenants: bigint }[]>`
+      SELECT COUNT(DISTINCT tenant_id) AS distinct_tenants
+      FROM public.item_aliases
+      WHERE lower(alias) = ${normalizedAlias}
+        AND item_id = ${itemId}::uuid
+        AND deleted_at IS NULL
+    `
+    const count = Number(result[0]?.distinct_tenants ?? 0)
+
+    if (count >= PROMOTION_THRESHOLD) {
+      // Upsert global row with sentinel (uuid-nil) tenant_id
+      await db.$executeRaw`
+        INSERT INTO public.item_aliases (tenant_id, alias, item_id, is_global, global_promoted_at, confirmed_count)
+        VALUES (${'00000000-0000-0000-0000-000000000000'}::uuid, ${normalizedAlias}, ${itemId}::uuid, TRUE, NOW(), ${count})
+        ON CONFLICT (tenant_id, lower(alias)) WHERE is_global = TRUE AND deleted_at IS NULL
+        DO UPDATE SET confirmed_count = EXCLUDED.confirmed_count,
+                      updated_at = NOW()
+      `
+      logger.info({ event: 'alias_promoted', alias: normalizedAlias, itemId, distinctTenants: count })
+    }
+  } catch (err) {
+    // Fire-and-forget — never surface promotion errors
+    logger.warn({ event: 'alias_promotion_failed', alias: normalizedAlias, itemId, error: String(err) })
+  }
 }
 
 // ── Enrich parsed intent with full matcher ─────────────────────────────────

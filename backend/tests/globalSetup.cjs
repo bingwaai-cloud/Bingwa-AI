@@ -44,6 +44,8 @@ module.exports = async function globalSetup() {
     '008_draft_transactions.sql',
     '009_sale_line_items.sql',
     '010_item_aliases.sql',
+    '011_global_alias_promotion.sql',
+    '012_unknown_messages.sql',
   ]
 
   const client = new Client({ connectionString: ownerUrl })
