@@ -95,6 +95,7 @@ export async function cleanupTenant(tenantId: string): Promise<void> {
     await tx.auditLog.deleteMany({})
     await tx.marketingBroadcast.deleteMany({})
     await tx.expense.deleteMany({})
+    await tx.unknownMessage.deleteMany({})
     await tx.userContext.deleteMany({})
     await tx.customer.deleteMany({})
     await tx.supplier.deleteMany({})

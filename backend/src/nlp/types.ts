@@ -15,6 +15,9 @@ export type Action =
   | 'marketing'
   | 'receipt'
   | 'subscription'
+  | 'payment_received'
+  | 'credit_sale'
+  | 'debt_inquiry'
   | 'unknown'
 
 export type Period = 'today' | 'yesterday' | 'week' | 'month'

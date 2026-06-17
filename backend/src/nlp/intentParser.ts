@@ -4,6 +4,8 @@ import { buildSystemPrompt } from './contextBuilder.js'
 import { normalizeCurrency } from './normalizers.js'
 import { matchItemSync, SEED_ALIASES } from './itemMatcher.js'
 import { resolveIntent, type ResolvedIntent } from './confidence.js'
+import { recordUnknownMessage } from './unknownMessageRecorder.js'
+import { db } from '../db.js'
 import type { Action, InventoryItem, ParsedIntent, ParsedLineItem, Period, UserContext } from './types.js'
 
 const NLP_TIMEOUT_MS = 8_000
@@ -19,6 +21,9 @@ const ACTIONS: readonly Action[] = [
   'marketing',
   'receipt',
   'subscription',
+  'payment_received',
+  'credit_sale',
+  'debt_inquiry',
   'unknown',
 ]
 const RESOLUTIONS = ['commit', 'confirm_default', 'clarify', 'reject'] as const
@@ -453,9 +458,13 @@ export async function parseIntent(
   message: string,
   context: UserContext
 ): Promise<ResolvedIntent> {
+  let resolved: ResolvedIntent
+
   if (!process.env['ANTHROPIC_API_KEY']) {
     logger.warn({ event: 'nlp_skipped', reason: 'ANTHROPIC_API_KEY not set' })
-    return resolveIntent(coerceSubscriptionIntent(message, FALLBACK_INTENT), context)
+    resolved = resolveIntent(coerceSubscriptionIntent(message, FALLBACK_INTENT), context)
+    void recordUnknownMessage({ tenantId: context.tenantId, message, rawNlpOutput: resolved, source: 'whatsapp' }, db)
+    return resolved
   }
 
   // Deterministic pre-check: catch strong signals (expense, subscription, report,
@@ -469,11 +478,14 @@ export async function parseIntent(
   const deterministic = deterministicIntent(message, context)
   if (deterministic && DETERMINISTIC_FIRST_ACTIONS.has(deterministic.action)) {
     logger.debug({ event: 'nlp_deterministic_hit', action: deterministic.action })
-    return resolveIntent(coerceSubscriptionIntent(message, deterministic), context)
+    resolved = resolveIntent(coerceSubscriptionIntent(message, deterministic), context)
+    void recordUnknownMessage({ tenantId: context.tenantId, message, rawNlpOutput: resolved, source: 'whatsapp' }, db)
+    return resolved
   }
 
   const parsed = coerceSubscriptionIntent(message, await callClaudeWithTimeout(message, context))
-  const resolved = resolveIntent(parsed, context)
+  resolved = resolveIntent(parsed, context)
+  void recordUnknownMessage({ tenantId: context.tenantId, message, rawNlpOutput: resolved, source: 'whatsapp' }, db)
 
   logger.debug({
     event: 'nlp_parsed',
