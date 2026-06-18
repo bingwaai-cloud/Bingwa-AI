@@ -37,6 +37,26 @@ const createPrismaClient = (): PrismaWithEvents =>
 
 export const db: PrismaWithEvents = globalForPrisma.prisma ?? createPrismaClient()
 
+// ── Admin/owner connection (bypasses RLS) ─────────────────────────────────
+// Used ONLY for cross-tenant aggregate queries (e.g. global alias promotion
+// COUNT(DISTINCT tenant_id)) that structurally cannot run under RLS.
+// Per multi-tenant.md: cross-tenant work uses the owner connection,
+// never a widened RLS policy. Do NOT use this for general tenant queries.
+let _adminDb: PrismaClient | null = null
+
+export function getAdminDb(): PrismaClient {
+  if (!_adminDb) {
+    const ownerUrl = process.env['OWNER_DATABASE_URL']
+    if (!ownerUrl) {
+      throw new Error('OWNER_DATABASE_URL is not set — cross-tenant admin queries require an owner connection')
+    }
+    _adminDb = new PrismaClient({
+      datasources: { db: { url: ownerUrl } },
+    })
+  }
+  return _adminDb
+}
+
 db.$on('error', (e) => {
   logger.error({ event: 'prisma_error', message: e.message })
 })

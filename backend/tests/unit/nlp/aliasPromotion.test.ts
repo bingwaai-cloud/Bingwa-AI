@@ -1,18 +1,29 @@
 /**
- * Unit/integration tests for global alias promotion (WP-9b Part 2).
+ * Unit/integration tests for global alias promotion (WP-9b Part 2 fix).
  *
  * Uses the real test DB. Verifies:
  *  1. Alias promotes to global after 5 distinct tenant confirmations.
  *  2. Does not promote at 4.
  *  3. Does not double-promote if already global.
+ *
+ * Cross-tenant operations (cleanup, isGlobal check, promotion) use the
+ * admin/owner connection (getAdminDb) because RLS caps visibility.
  */
 
-import { db, withTenant } from '../../../src/db.js'
+import { db, withTenant, getAdminDb } from '../../../src/db.js'
 import { promoteAliasIfThreshold } from '../../../src/nlp/itemMatcher.js'
 import { createTestTenant, cleanupTenant, seedItem } from '../../fixtures/tenant.js'
 import type { TestTenant } from '../../fixtures/tenant.js'
 
 const SENTINEL_ID = '00000000-0000-0000-0000-000000000000'
+
+/** Helper: delete all alias rows for the test alias, on the admin connection. */
+async function cleanAliases() {
+  const adminDb = getAdminDb()
+  await adminDb.$executeRaw`
+    DELETE FROM public.item_aliases WHERE lower(alias) = 'shuga'
+  `
+}
 
 describe('promoteAliasIfThreshold', () => {
   let tenants: TestTenant[] = []
@@ -38,22 +49,20 @@ describe('promoteAliasIfThreshold', () => {
     })
     itemId = item.id
 
-    // Clean any pre-existing global alias from prior test runs
-    await db.$executeRaw`
-      DELETE FROM public.item_aliases
-      WHERE is_global = TRUE
-        AND lower(alias) = ${alias.toLowerCase()}
-    `
+    // Clean any pre-existing alias from prior test runs, using admin connection
+    await cleanAliases()
   })
 
   afterAll(async () => {
-    // Clean global rows first
-    await db.$executeRaw`
-      DELETE FROM public.item_aliases WHERE is_global = TRUE AND lower(alias) = ${alias.toLowerCase()}
-    `
+    // Clean up, using admin connection for cross-tenant rows
+    await cleanAliases()
     for (const t of tenants) {
       await cleanupTenant(t.tenantId)
     }
+  })
+
+  beforeEach(async () => {
+    await cleanAliases()
   })
 
   /** Helper: insert a confirmed alias for a specific tenant. */
@@ -68,9 +77,10 @@ describe('promoteAliasIfThreshold', () => {
     })
   }
 
-  /** Check if global alias row exists. */
+  /** Check if global alias row exists, on the admin connection. */
   async function isGlobal(): Promise<boolean> {
-    const rows = await db.$queryRaw<{ cnt: bigint }[]>`
+    const adminDb = getAdminDb()
+    const rows = await adminDb.$queryRaw<{ cnt: bigint }[]>`
       SELECT COUNT(*) AS cnt FROM public.item_aliases
       WHERE tenant_id = ${SENTINEL_ID}::uuid
         AND lower(alias) = ${alias.toLowerCase()}
@@ -86,50 +96,41 @@ describe('promoteAliasIfThreshold', () => {
       await insertAliasForTenant(tenants[i]!.tenantId)
     }
 
-    await promoteAliasIfThreshold(alias, itemId, db)
+    await promoteAliasIfThreshold(alias, itemId)
 
     const global = await isGlobal()
     expect(global).toBe(true)
   })
 
   it('does not promote at 4 distinct tenants', async () => {
-    // Clean up everything and start fresh with only 4 tenants
-    await db.$executeRaw`
-      DELETE FROM public.item_aliases WHERE lower(alias) = ${alias.toLowerCase()}
-    `
-
     for (let i = 0; i < 4; i++) {
       await insertAliasForTenant(tenants[i]!.tenantId)
     }
 
-    await promoteAliasIfThreshold(alias, itemId, db)
+    await promoteAliasIfThreshold(alias, itemId)
 
     const global = await isGlobal()
     expect(global).toBe(false)
   })
 
   it('does not double-promote if already global', async () => {
-    // Clean and set up with 5 tenants again
-    await db.$executeRaw`
-      DELETE FROM public.item_aliases WHERE lower(alias) = ${alias.toLowerCase()}
-    `
-
     for (let i = 0; i < 5; i++) {
       await insertAliasForTenant(tenants[i]!.tenantId)
     }
 
     // First promotion
-    await promoteAliasIfThreshold(alias, itemId, db)
+    await promoteAliasIfThreshold(alias, itemId)
     expect(await isGlobal()).toBe(true)
 
     // Add a 6th tenant confirmation
     await insertAliasForTenant(tenants[5]!.tenantId)
 
     // Second promotion should be idempotent (UPSERT)
-    await promoteAliasIfThreshold(alias, itemId, db)
+    await promoteAliasIfThreshold(alias, itemId)
 
     // Verify only one global row exists
-    const rows = await db.$queryRaw<{ cnt: bigint }[]>`
+    const adminDb = getAdminDb()
+    const rows = await adminDb.$queryRaw<{ cnt: bigint }[]>`
       SELECT COUNT(*) AS cnt FROM public.item_aliases
       WHERE tenant_id = ${SENTINEL_ID}::uuid
         AND lower(alias) = ${alias.toLowerCase()}

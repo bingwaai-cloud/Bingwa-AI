@@ -1,7 +1,7 @@
 import type { DraftTransaction, Prisma } from '@prisma/client'
 import { withTenant } from '../db.js'
 import { normalizeCurrency } from '../nlp/normalizers.js'
-import { enrichMatchedItems, recordAliasMatch } from '../nlp/itemMatcher.js'
+import { enrichMatchedItems, recordAliasMatch, promoteAliasIfThreshold } from '../nlp/itemMatcher.js'
 import type { ParsedIntent } from '../nlp/types.js'
 import {
   createDraft as insertDraft,
@@ -315,6 +315,8 @@ async function commitConfirmedDraft(
       const itemNormalized = asOptionalString(line['itemNormalized'])
       if (matchedItemId && itemNormalized) {
         await recordAliasMatch(tenantId, itemNormalized, matchedItemId, tx)
+        // Fire-and-forget global promotion — runs on admin connection, never inside tx
+        void promoteAliasIfThreshold(itemNormalized, matchedItemId)
       }
     }
   }

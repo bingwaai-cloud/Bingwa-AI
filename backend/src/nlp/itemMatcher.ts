@@ -10,6 +10,7 @@
 
 import type { Prisma, PrismaClient } from '@prisma/client'
 import type { InventoryItem } from './types.js'
+import { getAdminDb } from '../db.js'
 import { logger } from '../utils/logger.js'
 
 // ── Seed (global) aliases ──────────────────────────────────────────────────
@@ -175,17 +176,24 @@ const PROMOTION_THRESHOLD = Number(process.env['ALIAS_PROMOTION_THRESHOLD'] || '
  * Promotes an alias to global when 5+ distinct tenants have confirmed it.
  * Called fire-and-forget after every alias confirmation write.
  * Uses sentinel tenant_id = 00000000-0000-0000-0000-000000000000 for global rows.
+ *
+ * IMPORTANT: the COUNT(DISTINCT tenant_id) and the global upsert run on
+ * the admin/owner connection (OWNER_DATABASE_URL) because RLS would cap
+ * visibility to {current tenant + global} — the threshold is structurally
+ * unreachable on the app connection. Per multi-tenant.md: cross-tenant
+ * aggregates use the owner connection, never a widened RLS policy.
  */
 export async function promoteAliasIfThreshold(
   alias: string,
   itemId: string,
-  db: PrismaClient
+  _db?: PrismaClient
 ): Promise<void> {
   const normalizedAlias = alias.toLowerCase().trim()
   if (!normalizedAlias) return
 
   try {
-    const result = await db.$queryRaw<{ distinct_tenants: bigint }[]>`
+    const adminDb = getAdminDb()
+    const result = await adminDb.$queryRaw<{ distinct_tenants: bigint }[]>`
       SELECT COUNT(DISTINCT tenant_id) AS distinct_tenants
       FROM public.item_aliases
       WHERE lower(alias) = ${normalizedAlias}
@@ -196,7 +204,7 @@ export async function promoteAliasIfThreshold(
 
     if (count >= PROMOTION_THRESHOLD) {
       // Upsert global row with sentinel (uuid-nil) tenant_id
-      await db.$executeRaw`
+      await adminDb.$executeRaw`
         INSERT INTO public.item_aliases (tenant_id, alias, item_id, is_global, global_promoted_at, confirmed_count)
         VALUES (${'00000000-0000-0000-0000-000000000000'}::uuid, ${normalizedAlias}, ${itemId}::uuid, TRUE, NOW(), ${count})
         ON CONFLICT (tenant_id, lower(alias)) WHERE is_global = TRUE AND deleted_at IS NULL
