@@ -7,6 +7,7 @@
 
 import type { Prisma, PrismaClient } from '@prisma/client'
 import type { ParsedIntent } from './types.js'
+import { withTenant } from '../db.js'
 import { logger } from '../utils/logger.js'
 
 export interface UnknownMessageInput {
@@ -22,22 +23,25 @@ export interface UnknownMessageInput {
  * surface to the caller or block the WhatsApp reply.
  *
  * Gated: only records when action is 'unknown'.
+ * Runs the insert inside withTenant so RLS (FORCE + WITH CHECK) accepts the row.
  */
 export async function recordUnknownMessage(
   input: UnknownMessageInput,
-  db: PrismaClient
+  _db: PrismaClient
 ): Promise<void> {
   // Gate: only record unknown-action messages
   if (input.rawNlpOutput.action !== 'unknown') return
 
   try {
-    await db.unknownMessage.create({
-      data: {
-        tenantId: input.tenantId,
-        message: input.message,
-        rawNlpOutput: JSON.parse(JSON.stringify(input.rawNlpOutput)) as Prisma.InputJsonValue,
-        source: input.source,
-      },
+    await withTenant(input.tenantId, async (tx) => {
+      await tx.unknownMessage.create({
+        data: {
+          tenantId: input.tenantId,
+          message: input.message,
+          rawNlpOutput: JSON.parse(JSON.stringify(input.rawNlpOutput)) as Prisma.InputJsonValue,
+          source: input.source,
+        },
+      })
     })
     logger.debug({ event: 'unknown_message_recorded', tenantId: input.tenantId })
   } catch (err) {
