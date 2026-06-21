@@ -5,13 +5,17 @@ import { AppError, ErrorCodes } from '../utils/AppError.js'
 import { logger } from '../utils/logger.js'
 import {
   initiateSubscriptionPayment,
+  initiateProviderPayment,
   handleMomoCallback,
   getPaymentStatus,
   isPlanKey,
   initiateAirtelSubscriptionPayment,
   handleAirtelCallback,
+  handleProviderWebhook,
   type AirtelCallbackPayload,
 } from '../payments/paymentService.js'
+import { flutterwaveProvider } from '../payments/flutterwaveProvider.js'
+import { selectedProviderName } from '../payments/providerRegistry.js'
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -54,7 +58,10 @@ export const initiatePayment = asyncHandler(async (req: Request, res: Response) 
   const { plan, phone } = parsed.data
   const tenantId = req.tenantId!
 
-  const result = await initiateSubscriptionPayment(tenantId, plan, phone)
+  // Provider-agnostic when configured; legacy MTN path otherwise (default).
+  const result = selectedProviderName() === 'flutterwave'
+    ? await initiateProviderPayment(tenantId, plan, phone)
+    : await initiateSubscriptionPayment(tenantId, plan, phone)
 
   res.status(202).json({ success: true, data: result })
 })
@@ -160,6 +167,47 @@ export const airtelCallback = asyncHandler(async (req: Request, res: Response) =
   setImmediate(() => {
     void handleAirtelCallback(parsed.data as AirtelCallbackPayload).catch((err) => {
       logger.error({ event: 'airtel_callback_processing_error', err })
+    })
+  })
+})
+
+
+/**
+ * POST /api/payments/flutterwave/callback
+ *
+ * Public endpoint — called by Flutterwave when a charge changes state.
+ * No JWT (the provider cannot authenticate with JWT).
+ *
+ * Security (WP-10):
+ *   1. Verify the `verif-hash` header against FLW_WEBHOOK_HASH (timing-safe)
+ *      using the RAW body BEFORE any processing. Invalid -> 401, drop.
+ *   2. Parse; non-charge / junk payloads -> 200 (so Flutterwave stops retrying).
+ *   3. Respond 200 immediately; settle asynchronously. The settle path re-queries
+ *      Flutterwave and trusts only the re-queried amount/status — the webhook body
+ *      is NOT trusted for money decisions.
+ */
+export const flutterwaveCallback = asyncHandler(async (req: Request & { rawBody?: Buffer }, res: Response) => {
+  const rawBody = req.rawBody ?? Buffer.from(JSON.stringify(req.body ?? {}))
+
+  if (!flutterwaveProvider.verifyWebhook(req.headers, rawBody)) {
+    logger.warn({ event: 'flw_callback_invalid_hash' })
+    res.status(401).json({ received: false })
+    return
+  }
+
+  const normalized = flutterwaveProvider.parseWebhook(req.body)
+  if (!normalized) {
+    logger.info({ event: 'flw_callback_ignored_event' })
+    res.status(200).json({ received: true })
+    return
+  }
+
+  // Acknowledge immediately — provider retries on slow responses.
+  res.status(200).json({ received: true })
+
+  setImmediate(() => {
+    void handleProviderWebhook(normalized, flutterwaveProvider).catch((err) => {
+      logger.error({ event: 'flw_callback_processing_error', err })
     })
   })
 })

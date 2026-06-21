@@ -10,8 +10,11 @@ import {
 } from '../reports/reportService.js'
 import {
   checkPendingPaymentTimeout,
+  checkPendingAirtelPaymentTimeout,
+  checkPendingPaymentTimeoutVia,
   initiateAutoRenewal,
 } from '../payments/paymentService.js'
+import { selectedProviderName } from '../payments/providerRegistry.js'
 
 const TIMEZONE = 'Africa/Kampala'
 
@@ -178,7 +181,12 @@ export function startScheduler(): void {
   cron.schedule(
     '*/15 * * * *',
     () => {
-      void checkPendingPaymentTimeout().catch((err) => {
+      // Provider-agnostic sweep when a PaymentProvider is configured (WP-10);
+      // legacy per-rail sweeps otherwise.
+      const sweep = selectedProviderName() === 'flutterwave'
+        ? checkPendingPaymentTimeoutVia()
+        : Promise.all([checkPendingPaymentTimeout(), checkPendingAirtelPaymentTimeout()])
+      void Promise.resolve(sweep).catch((err) => {
         logger.error({ event: 'payment_timeout_job_failed', err })
       })
     },

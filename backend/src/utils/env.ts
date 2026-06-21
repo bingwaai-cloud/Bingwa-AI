@@ -27,6 +27,7 @@ export function validateEnv(): void {
     'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_VERIFY_TOKEN',
     'API_URL', 'WEB_ORIGINS', 'REPO_URL',
     'MTN_MOMO_SUBSCRIPTION_KEY',
+    'PAYMENT_PROVIDER',
     'RAILWAY_PROJECT_ID', 'RAILWAY_ENVIRONMENT_ID',
   ]
 
@@ -62,5 +63,20 @@ export function validateEnv(): void {
   const missingSoft = softRequired.filter((k) => !process.env[k])
   if (missingSoft.length > 0) {
     console.warn(`[startup] WARNING — missing optional vars (features degraded): ${missingSoft.join(', ')}`)
+  }
+
+  // ── Conditional-required: the selected payment provider must be fully wired ──
+  // A misconfigured LIVE payment provider must NOT boot silently (WP-10). These
+  // are only enforced when that provider is actually selected, so dev/test runs
+  // on the legacy/default path are unaffected.
+  if ((process.env['PAYMENT_PROVIDER'] ?? 'legacy') === 'flutterwave') {
+    const flwRequired = ['FLW_SECRET_KEY', 'FLW_PUBLIC_KEY', 'FLW_WEBHOOK_HASH', 'FLW_ENCRYPTION_KEY']
+    const missingFlw = flwRequired.filter((k) => !process.env[k])
+    if (missingFlw.length > 0) {
+      console.error(
+        `[startup] FATAL — PAYMENT_PROVIDER=flutterwave but missing: ${missingFlw.join(', ')}`
+      )
+      process.exit(1)
+    }
   }
 }

@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto'
 import { db, withTenant } from '../db.js'
 import { logger } from '../utils/logger.js'
 import { AppError, ErrorCodes } from '../utils/AppError.js'
-import { normalizePhone } from '../utils/phone.js'
+import { normalizePhone, isAirtel } from '../utils/phone.js'
 import { sendTextMessage } from '../whatsapp/whatsappClient.js'
 import { insertAuditLog } from '../utils/audit.js'
 import {
@@ -26,13 +26,22 @@ import {
 import {
   createPaymentTransaction,
   findPaymentByProviderRef,
+  findPaymentByReference,
   findPaymentById,
   findPendingPaymentsOlderThan,
   findRecentPendingPayment,
   updatePaymentStatus,
+  markPaymentNeedsReview,
   type PaymentType,
+  type PaymentChannel,
 } from './paymentRepository.js'
-import type { Prisma } from '@prisma/client'
+import { getActivePaymentProvider } from './providerRegistry.js'
+import type {
+  PaymentProvider,
+  NormalizedWebhookResult,
+  ProviderTransaction,
+} from './PaymentProvider.js'
+import type { Prisma, PaymentTransaction } from '@prisma/client'
 
 // ── Plan catalogue ────────────────────────────────────────────────────────────
 
@@ -732,5 +741,306 @@ export async function checkPendingAirtelPaymentTimeout(): Promise<void> {
         err,
       })
     }
+  }
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Provider-agnostic flow (WP-10) — all NEW payment logic goes through the
+//  PaymentProvider interface selected by PAYMENT_PROVIDER. The legacy MTN/Airtel
+//  functions above are frozen for PAYMENT_PROVIDER=legacy + existing tests.
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Derive the plan key from a PaymentType (sub_basic / renewal_pro → basic/pro). */
+function planKeyFromType(type: string): PlanKey {
+  return type.replace('sub_', '').replace('renewal_', '') as PlanKey
+}
+
+/**
+ * Shared settle path. MUST be called inside withTenant(transaction.tenantId)
+ * so the status flip + subscription activation + audit entry commit or roll back
+ * together (CLAUDE.md: audit in the same tx as the financial write; RLS requires
+ * the tenant context this transaction sets). Every provider feeds into this.
+ */
+async function applySettledPayment(
+  tx: Prisma.TransactionClient,
+  args: {
+    transaction: PaymentTransaction
+    planKey:     PlanKey
+    channel:     PaymentChannel
+    amountUGX:   number
+    providerRef: string | null
+    source:      string
+  }
+): Promise<void> {
+  await updatePaymentStatus(args.transaction.id, 'successful', tx)
+  await activateSubscription(
+    args.transaction.tenantId,
+    args.planKey,
+    args.transaction.phone,
+    args.amountUGX,
+    args.channel,
+    tx
+  )
+  await insertAuditLog(tx, {
+    tenantId:   args.transaction.tenantId,
+    action:     'payment.successful',
+    entityType: 'payment',
+    entityId:   args.transaction.id,
+    newValue:   {
+      plan:        args.planKey,
+      amountUgx:   args.amountUGX,
+      channel:     args.channel,
+      providerRef: args.providerRef,
+    },
+    source:     args.source,
+  })
+}
+
+/**
+ * Apply an AUTHORITATIVE (re-queried) provider snapshot to our row. Handles
+ * success (with amount check) and failure. Pending is left to the caller, since
+ * "pending" means different things on a fresh webhook vs a 10-minute-stale sweep.
+ *
+ * Anti-fraud (security.md §8): the amount compared here is the RE-QUERIED amount,
+ * never a client/webhook-reported one. A mismatch parks the row as needs_review
+ * and does NOT activate.
+ */
+async function settleFromAuthoritative(
+  transaction: PaymentTransaction,
+  ownerPhone: string,
+  authoritative: ProviderTransaction,
+  source: string
+): Promise<void> {
+  const channel = (transaction.provider as PaymentChannel)
+  const planKey = planKeyFromType(transaction.type)
+
+  if (authoritative.status === 'successful') {
+    if (authoritative.amountUGX !== transaction.amountUgx) {
+      logger.error({
+        event:    'payment_amount_mismatch',
+        reference: transaction.providerReference,
+        expected: transaction.amountUgx,
+        received: authoritative.amountUGX,
+      })
+      await withTenant(transaction.tenantId, async (tx) => {
+        await markPaymentNeedsReview(transaction.id, tx)
+        await insertAuditLog(tx, {
+          tenantId:   transaction.tenantId,
+          action:     'payment.needs_review',
+          entityType: 'payment',
+          entityId:   transaction.id,
+          oldValue:   { expected: transaction.amountUgx },
+          newValue:   { received: authoritative.amountUGX, providerRef: authoritative.providerRef },
+          source,
+        })
+      })
+      await sendTextMessage(
+        ownerPhone,
+        'Payment received but the amount needs checking. Our team will confirm shortly — no action needed.'
+      )
+      return
+    }
+
+    await withTenant(transaction.tenantId, async (tx) => {
+      await applySettledPayment(tx, {
+        transaction,
+        planKey,
+        channel,
+        amountUGX:   authoritative.amountUGX,
+        providerRef: authoritative.providerRef,
+        source,
+      })
+    })
+    await sendTextMessage(
+      ownerPhone,
+      `✅ Payment received! Your Gezi AI ${SUBSCRIPTION_PLANS[planKey]?.name ?? planKey} plan is now active for 30 days. Keep selling! 🚀`
+    )
+    logger.info({ event: 'payment_successful', reference: transaction.providerReference, tenantId: transaction.tenantId })
+    return
+  }
+
+  if (authoritative.status === 'failed') {
+    await withTenant(transaction.tenantId, async (tx) => {
+      await updatePaymentStatus(transaction.id, 'failed', tx)
+      await insertAuditLog(tx, {
+        tenantId:   transaction.tenantId,
+        action:     'payment.failed',
+        entityType: 'payment',
+        entityId:   transaction.id,
+        newValue:   { providerRef: authoritative.providerRef },
+        source,
+      })
+    })
+    await sendTextMessage(
+      ownerPhone,
+      'Payment failed. No money was charged. Reply PAY to try again.'
+    )
+    logger.warn({ event: 'payment_failed', reference: transaction.providerReference, tenantId: transaction.tenantId })
+  }
+}
+
+/**
+ * Handle a verified, parsed provider webhook (WP-10 critical flow).
+ *
+ *   verify hash (route) -> parse (route) -> THIS:
+ *   lookup row by reference  (unknown -> log + no-op; route already 200'd)
+ *   already processed        (status != pending -> idempotent no-op)
+ *   RE-QUERY the provider    (trust ONLY the re-queried amount/status)
+ *   amount mismatch          -> needs_review, NO activation
+ *   success                  -> activate + audit in ONE db transaction
+ *
+ * The webhook body's own amount/status are NEVER trusted for settlement.
+ */
+export async function handleProviderWebhook(
+  normalized: NormalizedWebhookResult,
+  provider: PaymentProvider = getActivePaymentProvider()
+): Promise<void> {
+  const transaction = await findPaymentByReference(normalized.reference)
+  if (!transaction) {
+    logger.warn({ event: 'provider_webhook_unknown_ref', reference: normalized.reference, provider: provider.name })
+    return
+  }
+  if (transaction.status !== 'pending') {
+    logger.info({ event: 'provider_webhook_already_processed', reference: normalized.reference, status: transaction.status })
+    return
+  }
+
+  const tenant = await db.tenant.findUnique({ where: { id: transaction.tenantId } })
+  if (!tenant) {
+    logger.error({ event: 'provider_webhook_tenant_not_found', tenantId: transaction.tenantId })
+    return
+  }
+
+  let authoritative: ProviderTransaction
+  try {
+    authoritative = await provider.getTransaction(normalized.reference)
+  } catch (err) {
+    // Re-query failed — DO NOT trust the webhook body. Leave pending; the
+    // timeout sweep will retry. (security.md §8: never settle on unverified data.)
+    logger.error({ event: 'provider_webhook_requery_failed', reference: normalized.reference, err })
+    return
+  }
+
+  if (authoritative.status === 'pending') {
+    logger.info({ event: 'provider_webhook_requery_still_pending', reference: normalized.reference })
+    return
+  }
+
+  await settleFromAuthoritative(transaction, tenant.ownerPhone, authoritative, 'webhook')
+}
+
+/**
+ * Provider-agnostic timeout sweep (WP-10 item 5). Pending > 10 min -> re-query
+ * through the interface -> resolve (success/fail) or mark timeout. Routed through
+ * getTransaction(), never the concrete clients.
+ */
+export async function checkPendingPaymentTimeoutVia(
+  provider: PaymentProvider = getActivePaymentProvider()
+): Promise<void> {
+  const stale = await findPendingPaymentsOlderThan(PAYMENT_TIMEOUT_MS)
+  if (stale.length === 0) return
+
+  logger.info({ event: 'provider_payment_timeout_check', count: stale.length, provider: provider.name })
+
+  for (const row of stale) {
+    const reference = row.providerReference ?? row.id
+    try {
+      const authoritative = await provider.getTransaction(reference)
+
+      if (authoritative.status === 'pending') {
+        // Still pending after the timeout window -> mark timeout + audit in one tx.
+        await withTenant(row.tenantId, async (tx) => {
+          await updatePaymentStatus(row.id, 'timeout', tx)
+          await insertAuditLog(tx, {
+            tenantId:   row.tenantId,
+            action:     'payment.timeout',
+            entityType: 'payment',
+            entityId:   row.id,
+            source:     'scheduler',
+          })
+        })
+        const tenant = await db.tenant.findUnique({ where: { id: row.tenantId } })
+        if (tenant) {
+          await sendTextMessage(
+            tenant.ownerPhone,
+            'Your payment timed out. No money was charged. Reply PAY to try again.'
+          )
+        }
+        logger.warn({ event: 'payment_timeout', txId: row.id, tenantId: row.tenantId })
+        continue
+      }
+
+      const tenant = await db.tenant.findUnique({ where: { id: row.tenantId } })
+      if (!tenant) {
+        logger.error({ event: 'provider_timeout_tenant_not_found', tenantId: row.tenantId })
+        continue
+      }
+      await settleFromAuthoritative(row, tenant.ownerPhone, authoritative, 'scheduler')
+    } catch (err) {
+      logger.error({ event: 'provider_timeout_check_error', txId: row.id, tenantId: row.tenantId, err })
+    }
+  }
+}
+
+/**
+ * Provider-agnostic subscription payment initiation (WP-10). Uses the active
+ * provider; persists the pending row FIRST (so a fast webhook can resolve it),
+ * then asks the provider to collect. The channel stored is derived from the phone
+ * (the rail the money actually rides), independent of which provider integration
+ * we use to reach it.
+ */
+export async function initiateProviderPayment(
+  tenantId: string,
+  plan: PlanKey,
+  phone: string,
+  isRenewal = false,
+  provider: PaymentProvider = getActivePaymentProvider()
+): Promise<InitiatePaymentResult> {
+  if (!isPlanKey(plan)) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, `Unknown plan: ${plan}`)
+  }
+
+  const existing = await findRecentPendingPayment(tenantId)
+  if (existing) {
+    throw new AppError(
+      ErrorCodes.DUPLICATE_PAYMENT,
+      'A payment is already in progress. Please wait for the USSD prompt.',
+      409
+    )
+  }
+
+  const planConfig      = SUBSCRIPTION_PLANS[plan]
+  const transactionId   = randomUUID()
+  const normalizedPhone = normalizePhone(phone)
+  const type: PaymentType = isRenewal ? `renewal_${plan}` : `sub_${plan}`
+  const channel: PaymentChannel = isAirtel(normalizedPhone) ? 'airtel' : 'mtn_momo'
+
+  await createPaymentTransaction({
+    id:                transactionId,
+    tenantId,
+    provider:          channel,
+    providerReference: transactionId,   // our tx_ref == idempotency key
+    amountUgx:         planConfig.amountUgx,
+    type,
+    phone:             normalizedPhone,
+  })
+
+  try {
+    await provider.initiateCollection(
+      normalizedPhone,
+      planConfig.amountUgx,
+      transactionId,
+      `Gezi AI ${planConfig.name} plan`
+    )
+  } catch (err) {
+    await updatePaymentStatus(transactionId, 'failed')
+    throw err
+  }
+
+  return {
+    transactionId,
+    status:  'pending',
+    message: 'Payment initiated. You will receive a USSD prompt on your phone. Enter your PIN to complete.',
   }
 }

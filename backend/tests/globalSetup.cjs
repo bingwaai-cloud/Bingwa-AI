@@ -47,6 +47,7 @@ module.exports = async function globalSetup() {
     '011_global_alias_promotion.sql',
     '012_unknown_messages.sql',
     '013_global_alias_sentinel_tenant.sql',
+    '014_payment_status_check.sql',
   ]
 
   const client = new Client({ connectionString: ownerUrl })

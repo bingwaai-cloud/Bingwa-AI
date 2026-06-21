@@ -7,6 +7,7 @@ import {
   momoCallback,
   initiateAirtelPayment,
   airtelCallback,
+  flutterwaveCallback,
 } from '../controllers/paymentController.js'
 import { logger } from '../utils/logger.js'
 
@@ -62,3 +63,7 @@ function verifyAirtelSignature(req: Request, res: Response, next: NextFunction):
 }
 
 paymentCallbackRouter.post('/airtel/callback', verifyAirtelSignature, airtelCallback)
+
+// Flutterwave callback (MTN + Airtel via one aggregator).
+// Hash verification happens INSIDE the handler against the raw body.
+paymentCallbackRouter.post('/flutterwave/callback', flutterwaveCallback)

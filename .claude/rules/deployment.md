@@ -168,3 +168,71 @@ bingwa.ai       → Landing/marketing page
 
 SSL: Railway auto-provisions via Let's Encrypt
 ```
+
+## Flutterwave cutover runbook — Individual → Business account (WP-10)
+
+The Flutterwave account starts as an **Individual** account and migrates to a
+**Business** account once KYB clears. By design (CLAUDE.md vendor decision) this
+is a **config-only** change: all payment code sits behind the `PaymentProvider`
+interface and reads every Flutterwave value from env at call time
+(`flutterwaveProvider.ts` → `flwConfig()`), selected by `PAYMENT_PROVIDER`. No
+application code changes, no redeploy of new code is required to switch accounts —
+only env + webhook re-registration.
+
+What changes between accounts: `FLW_SECRET_KEY`, `FLW_PUBLIC_KEY`,
+`FLW_ENCRYPTION_KEY`, `FLW_WEBHOOK_HASH` (new merchant = new keys + new secret
+hash), possibly `FLW_BASE_URL`, and the dashboard-registered webhook URL.
+What does NOT change: our `payment_transactions` table stays the source of truth;
+in-flight references remain valid in our DB.
+
+### Pre-cutover (Business account ready, not yet live)
+1. Generate the Business account's keys in the Flutterwave dashboard and set a
+   new secret hash. Store them in the secrets manager as a staged set
+   (`FLW_*_NEXT`) — never in code, never logged.
+2. Register the production webhook URL on the Business account:
+   `https://api.<domain>/api/payments/flutterwave/callback`.
+3. In a staging env, set `PAYMENT_PROVIDER=flutterwave` + the Business `FLW_*`
+   and run one sandbox/live-test charge end-to-end: initiate → webhook → re-query
+   → activation. Confirm `payment_transactions` settles `successful` and the
+   audit row is written in the same tx.
+
+### Key rotation + webhook re-registration (the cutover)
+4. Pick a low-traffic window (overnight EAT). Announce a short maintenance note.
+5. Drain in-flight payments: stop initiating new charges (feature-flag the
+   initiate endpoint or set the API read-only for payments) and let the timeout
+   sweep + webhooks settle anything still `pending` on the Individual account.
+   Confirm `SELECT count(*) FROM payment_transactions WHERE status='pending'` ≈ 0.
+6. Swap env values: `FLW_SECRET_KEY`, `FLW_PUBLIC_KEY`, `FLW_ENCRYPTION_KEY`,
+   `FLW_WEBHOOK_HASH` (and `FLW_BASE_URL` if it differs) → Business values.
+   Restart the API + worker so `flwConfig()` reads the new values. (Startup env
+   validation fails fast if any FLW var is missing while
+   `PAYMENT_PROVIDER=flutterwave`.)
+7. Re-register / verify the webhook URL points at the Business account and that
+   its secret hash equals the new `FLW_WEBHOOK_HASH`. Send a Flutterwave test
+   webhook; confirm we return 200 and that a deliberately wrong `verif-hash` is
+   rejected with 401 (the route verifies before processing).
+
+### Parallel-run window
+8. Keep the Individual account's webhook endpoint and keys **accepting** (do not
+   revoke immediately) for 24–48h so any late callbacks for charges created
+   pre-cutover still settle. Our webhook handler is idempotent and re-queries by
+   reference, so a stray late callback is safely a no-op or a correct settle.
+9. Monitor: payment success rate, `status='needs_review'` count (amount
+   mismatches — investigate any), `provider_webhook_*` and `flw_*` log events,
+   and the timeout-sweep audit entries.
+
+### Verification (cutover is "done" only when all green)
+10. A real end-to-end charge on the Business account settles `successful` with an
+    audit row in the same DB transaction.
+11. An amount-mismatch test charge lands in `needs_review` and does NOT activate a
+    subscription.
+12. A forged-hash webhook call returns 401; a duplicate webhook is a no-op.
+13. No `pending` rows older than the timeout window after one sweep cycle.
+14. Then, and only then, revoke the Individual account keys and remove the
+    `FLW_*_NEXT` staging secrets.
+
+### Rollback
+If the Business account misbehaves, revert step 6 (restore Individual `FLW_*` in
+secrets, restart) and re-point the webhook to the Individual endpoint. Because the
+account is config, rollback is a secrets revert + restart (~minutes) with no code
+deploy. `payment_transactions` is unaffected.
