@@ -1,0 +1,1367 @@
+[
+ {
+  "alias": "ssukaali",
+  "canonical": "sugar",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "omunnyo",
+  "canonical": "salt",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "amafuta g’okufumba",
+  "canonical": "cooking oil",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "oli",
+  "canonical": "cooking oil",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "akawunga",
+  "canonical": "maize flour",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "kawunga",
+  "canonical": "maize flour",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "omuceere",
+  "canonical": "rice",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ssabbuuni",
+  "canonical": "soap",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "omugaati",
+  "canonical": "bread",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "amata",
+  "canonical": "milk",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ennyaanya",
+  "canonical": "tomatoes",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "nyaanya",
+  "canonical": "tomatoes",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "obutungulu",
+  "canonical": "onions",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "amatooke",
+  "canonical": "matooke",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "omuwogo",
+  "canonical": "cassava",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ebijanjaalo",
+  "canonical": "beans",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ebinyeebwa",
+  "canonical": "groundnuts",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "binyeebwa",
+  "canonical": "groundnuts",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "kkabichi",
+  "canonical": "cabbage",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ovakedo",
+  "canonical": "avocado",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "katoni ya ssabbuuni",
+  "canonical": "carton of soap",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ensawo y’omuceere",
+  "canonical": "bag of rice",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "kuleeti ya soda",
+  "canonical": "crate of soda",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "bbeeyi y’obuwunga",
+  "canonical": "bale of flour",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "bbokisi ya bisikwiiti",
+  "canonical": "box of biscuits",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "jirikaani y’amafuta",
+  "canonical": "jerrycan of oil",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ensawo y’ebijanjaalo",
+  "canonical": "sack of beans",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "tuleyi y’amagi",
+  "canonical": "tray of eggs",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "essowaani y’emmere",
+  "canonical": "plate of food",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "caayi",
+  "canonical": "tea",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "cupaati",
+  "canonical": "chapati",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "lolekisi",
+  "canonical": "rolex",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "omunnyo gw’ennyama",
+  "canonical": "meat stew",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "amazzi ag’omu ccupa",
+  "canonical": "bottled water",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ennyama y’ente",
+  "canonical": "beef",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ennyama y’embuzi",
+  "canonical": "goat meat",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "enkoko",
+  "canonical": "chicken",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ekibumba",
+  "canonical": "liver",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ebyenda",
+  "canonical": "offal",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "amagumba",
+  "canonical": "bones",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ennyama ensaliddwa",
+  "canonical": "minced meat",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "sosegi",
+  "canonical": "sausages",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "omugaati gumu",
+  "canonical": "loaf of bread",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "bbansi",
+  "canonical": "buns",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "keeki",
+  "canonical": "cake",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "mandaazi",
+  "canonical": "doughnuts",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "bisikwiiti",
+  "canonical": "cookies",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "obuwunga",
+  "canonical": "flour",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ekizimbulukusa",
+  "canonical": "yeast",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "amagi",
+  "canonical": "eggs",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "parasitamolo",
+  "canonical": "paracetamol",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "pcm",
+  "canonical": "paracetamol",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "amox",
+  "canonical": "amoxicillin",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "loanword commonly used; confirm regional pronunciation",
+  "canonical": "amoxicillin",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "siropu w’ekifuba",
+  "canonical": "cough syrup",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ors",
+  "canonical": "oral rehydration salts",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "kiti y’okukebera omusujja",
+  "canonical": "malaria test kit",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "bandeegi",
+  "canonical": "bandage",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "sanitaiza",
+  "canonical": "sanitizer",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "vitamini",
+  "canonical": "vitamins",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "buleeki paadi",
+  "canonical": "brake pads",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "firita y’amafuta",
+  "canonical": "oil filter",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "sipaaka pulagi",
+  "canonical": "spark plug",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "bbatule y’emmotoka",
+  "canonical": "car battery",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ffaan bbeleti",
+  "canonical": "fan belt",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ttaala y’emmotoka",
+  "canonical": "headlamp",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "mafuta ga yingini",
+  "canonical": "engine oil",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ttaaya",
+  "canonical": "tyre",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okukyusa amafuta",
+  "canonical": "oil change",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okuddaabiriza buleeki",
+  "canonical": "brake repair",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okutereeza nnamuziga",
+  "canonical": "wheel alignment",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okuteekamu bbatule",
+  "canonical": "battery fitting",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okukebera yingini",
+  "canonical": "engine diagnosis",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okuddaabiriza ttaaya",
+  "canonical": "tyre repair",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okuddaabiriza omubiri gw’emmotoka",
+  "canonical": "body work",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okusika emmotoka",
+  "canonical": "towing",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ttaaya ya pikipiki",
+  "canonical": "motorcycle tyre",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ttaaya boda",
+  "canonical": "motorcycle tyre",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "tyubu",
+  "canonical": "tube",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "buleeki shu",
+  "canonical": "brake shoe",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ccaani",
+  "canonical": "chain",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "sipuloketi",
+  "canonical": "sprocket",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "endabirwamu",
+  "canonical": "mirror",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "herimeti",
+  "canonical": "helmet",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "sementi",
+  "canonical": "cement",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "emisumaali",
+  "canonical": "nails",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ebaati",
+  "canonical": "roofing sheet",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "langi",
+  "canonical": "paint",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "waya w’okusiba",
+  "canonical": "binding wire",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "payipu ya pvc",
+  "canonical": "pvc pipe",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "kkufulu y’oluggi",
+  "canonical": "door lock",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ggaali ya mukono",
+  "canonical": "wheelbarrow",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "waya y’amasannyalaze",
+  "canonical": "electric cable",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "soketi",
+  "canonical": "socket",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "siwiici",
+  "canonical": "switch",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "buleeka",
+  "canonical": "circuit breaker",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "bbalaabu ya led",
+  "canonical": "led bulb",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "extension",
+  "canonical": "extension cable",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "loanword commonly used; confirm regional pronunciation",
+  "canonical": "extension cable",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "payipu ya conduit",
+  "canonical": "conduit pipe",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "bbokisi ya mita",
+  "canonical": "meter box",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ttivvi",
+  "canonical": "television",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "leediyo",
+  "canonical": "radio",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "sipika",
+  "canonical": "speaker",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "dikoda",
+  "canonical": "decoder",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "limooti",
+  "canonical": "remote control",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "caaja",
+  "canonical": "charger",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "pawabaanka",
+  "canonical": "power bank",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "loanword commonly used; confirm regional pronunciation",
+  "canonical": "solar panel",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ssimu ya smartphone",
+  "canonical": "smartphone",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ssimu ya mabbaatuuni",
+  "canonical": "feature phone",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "protector",
+  "canonical": "screen protector",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "loanword commonly used; confirm regional pronunciation",
+  "canonical": "screen protector",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "kava ya ssimu",
+  "canonical": "phone cover",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "earphone",
+  "canonical": "earphones",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "waya ya usb",
+  "canonical": "usb cable",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "loanword commonly used; confirm regional pronunciation",
+  "canonical": "memory card",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "loanword commonly used; confirm regional pronunciation",
+  "canonical": "sim card",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okuteeka ssente",
+  "canonical": "cash deposit",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "dep",
+  "canonical": "cash deposit",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okuggyayo ssente",
+  "canonical": "cash withdrawal",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "wd",
+  "canonical": "cash withdrawal",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "air",
+  "canonical": "airtime",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "loanword commonly used; confirm regional pronunciation",
+  "canonical": "airtime",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "data",
+  "canonical": "data bundle",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "loanword commonly used; confirm regional pronunciation",
+  "canonical": "data bundle",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okusasula ebisale",
+  "canonical": "utility payment",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okusasula fiizi",
+  "canonical": "school fees payment",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okusasula omusuubuzi",
+  "canonical": "merchant payment",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okusindika ssente",
+  "canonical": "money transfer",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ddiraasi",
+  "canonical": "dress",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "saati",
+  "canonical": "shirt",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "empale",
+  "canonical": "trousers",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "jiini",
+  "canonical": "jeans",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "yunifoomu y’essomero",
+  "canonical": "school uniform",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "engatto",
+  "canonical": "shoes",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ensawo y’omu ngalo",
+  "canonical": "handbag",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "jaketi",
+  "canonical": "jacket",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okusala enviiri",
+  "canonical": "haircut",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okusiba enviiri",
+  "canonical": "braiding",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okujjanjaba enviiri",
+  "canonical": "hair treatment",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "shampu",
+  "canonical": "shampoo",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okusala ekirevu",
+  "canonical": "beard trim",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "manikyo",
+  "canonical": "manicure",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "langi y’enviiri",
+  "canonical": "hair dye",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okuteekako wiigi",
+  "canonical": "wig fitting",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ensigo z’akawunga",
+  "canonical": "maize seed",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ensigo z’ebijanjaalo",
+  "canonical": "bean seed",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "nnakavundira",
+  "canonical": "fertilizer",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "eddagala ly’ebiwuka",
+  "canonical": "pesticide",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "eddagala ly’omuddo",
+  "canonical": "herbicide",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "emmere y’ebisolo",
+  "canonical": "animal feed",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "kandooya",
+  "canonical": "watering can",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "gambooti",
+  "canonical": "gumboots",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "eddagala ly’enjoka",
+  "canonical": "dewormer",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "eddagala ly’amakovu",
+  "canonical": "tick spray",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "vaccine y’enkoko",
+  "canonical": "poultry vaccine",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "loanword commonly used; confirm regional pronunciation",
+  "canonical": "antibiotic",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "loanword commonly used; confirm regional pronunciation",
+  "canonical": "mineral lick",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "siringi",
+  "canonical": "syringe",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "eddagala eritta obuwuka",
+  "canonical": "disinfectant",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "vitamini z’ebisolo",
+  "canonical": "animal vitamins",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okujjuza ggaasi wa kilo 6",
+  "canonical": "6 kg gas refill",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okujjuza ggaasi wa kilo 12",
+  "canonical": "12 kg gas refill",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "amanda",
+  "canonical": "charcoal",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "amafuta g’ettaala",
+  "canonical": "kerosene",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "petulooli",
+  "canonical": "petrol",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "dizero",
+  "canonical": "diesel",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "regulator ya ggaasi",
+  "canonical": "gas regulator",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "payipu ya ggaasi",
+  "canonical": "gas hose",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okujjuza amazzi liita 20",
+  "canonical": "20 litre water refill",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "loanword commonly used; confirm regional pronunciation",
+  "canonical": "soda",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "jjuusi",
+  "canonical": "juice",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "loanword commonly used; confirm regional pronunciation",
+  "canonical": "energy drink",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "bbulaafu",
+  "canonical": "ice",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "dispenser y’amazzi",
+  "canonical": "water dispenser",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "depoziiti y’eccupa enkalu",
+  "canonical": "empty bottle deposit",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okutereeza ddiraasi",
+  "canonical": "dress alteration",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okutunga yunifoomu y’essomero",
+  "canonical": "school uniform sewing",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okukyusa zipu",
+  "canonical": "zip replacement",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okukuba ebiwandiiko ku printer",
+  "canonical": "document printing",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "print",
+  "canonical": "document printing",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "fotokopi",
+  "canonical": "photocopy",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "copy",
+  "canonical": "photocopy",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "loanword commonly used; confirm regional pronunciation",
+  "canonical": "lamination",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ekifaananyi kya paasipooti",
+  "canonical": "passport photo",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okukuba banner",
+  "canonical": "banner printing",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "entebe",
+  "canonical": "chair",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "emmeeza",
+  "canonical": "table",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "ekitanda",
+  "canonical": "bed",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "wadulobu",
+  "canonical": "wardrobe",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "oluggi",
+  "canonical": "door",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "akaterekero",
+  "canonical": "shelf",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "matala",
+  "canonical": "mattress",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ },
+ {
+  "alias": "okuddaabiriza sofa",
+  "canonical": "sofa repair",
+  "scope": "global",
+  "source": "luganda-corpus-v1",
+  "approved": true
+ }
+]

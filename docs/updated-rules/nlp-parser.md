@@ -109,7 +109,7 @@ today's totals; last 5 interactions (NOT 20); any open draft awaiting reply.
   target 200+ cases tagged: multi-item, luganda, swahili, mixed, shorthand,
   typo, anomaly, ambiguous
 - Every NLP change runs the full corpus; pass rate must not regress
-- The 20 cases in docs/nlp-spec.md are the floor, not the target
+- The 10 cases in docs/nlp-spec.md are the floor, not the target
 - Run: `npm run test:nlp`
 
 ## Voice notes (Phase 2)

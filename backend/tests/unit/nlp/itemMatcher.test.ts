@@ -5,7 +5,7 @@
  * requires a DB transaction — tested in integration/itemMatcher.test.ts.
  */
 
-import { matchItemSync, SEED_ALIASES } from '../../../src/nlp/itemMatcher.js'
+import { matchItemSync, SEED_ALIASES, normalizeForMatch } from '../../../src/nlp/itemMatcher.js'
 import type { InventoryItem } from '../../../src/nlp/types.js'
 
 const mockInventory: InventoryItem[] = [
@@ -194,5 +194,23 @@ describe('SEED_ALIASES', () => {
     expect(SEED_ALIASES['rayisi']).toBe('rice')
     expect(SEED_ALIASES['maharagwe']).toBe('beans')
     expect(SEED_ALIASES['obunde']).toBe('beans')
+  })
+})
+describe('apostrophe-insensitive matching (Luganda genitive forms)', () => {
+  // Seed alias "amafuta g’okufumba" -> cooking oil. Phone typists produce
+  // the curly ’, straight ', or no apostrophe — all must resolve identically.
+  it('curly apostrophe resolves to cooking oil', () => {
+    expect(matchItemSync('amafuta g’okufumba', mockInventory)?.id).toBe('item-cooking-oil')
+  })
+  it('straight apostrophe resolves to cooking oil', () => {
+    expect(matchItemSync("amafuta g'okufumba", mockInventory)?.id).toBe('item-cooking-oil')
+  })
+  it('missing apostrophe resolves to cooking oil', () => {
+    expect(matchItemSync('amafuta gokufumba', mockInventory)?.id).toBe('item-cooking-oil')
+  })
+  it('normalizeForMatch collapses all three apostrophe variants', () => {
+    const none = normalizeForMatch('amafuta gokufumba')
+    expect(normalizeForMatch('amafuta g’okufumba')).toBe(none)
+    expect(normalizeForMatch("amafuta g'okufumba")).toBe(none)
   })
 })

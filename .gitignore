@@ -10,3 +10,11 @@ prisma/migrations/dev.db
 # FUSE mount artifacts (cannot be unlinked on this filesystem)
 .fuse_hidden*
 **/.fuse_hidden*
+
+# Luganda corpus: keep only the FINAL source workbook; exclude 100MB+ of
+# reference PDFs, machine-generated .inspect.ndjson, and intermediate workbooks.
+docs/Learn Luganda/*
+!docs/Learn Luganda/Gezi_AI_Luganda_Marketplace_Corpus_FINAL.xlsx
+*.inspect.ndjson
+# Corrupted intake workbook — never commit (FUSE write damage)
+docs/Gezi_AI_Luganda_Corpus_Intake.xlsx
