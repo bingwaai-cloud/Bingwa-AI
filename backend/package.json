@@ -9,7 +9,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "test:nlp": "node --experimental-vm-modules node_modules/jest/bin/jest.js tests/nlp --verbose --forceExit",
+    "test:nlp": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.config.nlp.cjs --verbose --forceExit",
     "test:api": "node --experimental-vm-modules node_modules/jest/bin/jest.js tests/api --verbose",
     "test:reports": "node --experimental-vm-modules node_modules/jest/bin/jest.js tests/unit/reports --verbose --forceExit",
     "migrate": "prisma migrate dev --schema=db/schema.prisma",

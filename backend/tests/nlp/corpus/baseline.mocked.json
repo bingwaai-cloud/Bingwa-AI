@@ -1,0 +1,11 @@
+{
+  "multi-item": 1.0,
+  "luganda": 1.0,
+  "swahili": 1.0,
+  "mixed": 1.0,
+  "shorthand": 1.0,
+  "typo": 1.0,
+  "anomaly": 1.0,
+  "ambiguous": 1.0,
+  "__comment": "Mocked mode: every tag must pass at 100%. A drop below 1.0 means a real pipeline regression."
+}

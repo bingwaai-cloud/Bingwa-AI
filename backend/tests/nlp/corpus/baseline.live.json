@@ -1,0 +1,11 @@
+{
+  "multi-item": 0.85,
+  "luganda": 0.75,
+  "swahili": 0.80,
+  "mixed": 0.80,
+  "shorthand": 0.85,
+  "typo": 0.70,
+  "anomaly": 0.85,
+  "ambiguous": 0.75,
+  "__comment": "Live mode (RUN_LIVE_NLP=1): per-tag fractional pass-rate floors. Never blocks CI."
+}
