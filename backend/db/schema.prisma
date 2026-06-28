@@ -44,6 +44,7 @@ model Subscription {
   expiresAt     DateTime? @db.Timestamptz()
   paymentMethod String?   @db.VarChar(20)
   paymentPhone  String?   @db.VarChar(20)
+  graceUntil    DateTime? @map("grace_until") @db.Timestamptz()
   createdAt     DateTime  @default(now()) @db.Timestamptz()
   updatedAt     DateTime  @updatedAt @db.Timestamptz()
 

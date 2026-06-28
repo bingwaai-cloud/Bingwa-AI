@@ -2,6 +2,7 @@ import type { Tenant } from '@prisma/client'
 import { db, withTenant } from '../db.js'
 import { logger } from '../utils/logger.js'
 import { sendTextMessage } from '../whatsapp/whatsappClient.js'
+import { insertAuditLog } from '../utils/audit.js'
 import { getDailySummary } from '../repositories/salesRepository.js'
 import { getDailyPurchaseSummary } from '../repositories/purchasesRepository.js'
 import { findLowStockItems } from '../repositories/itemRepository.js'
@@ -151,6 +152,55 @@ export async function sendSubscriptionReminders(): Promise<void> {
       logger.info({ event: 'subscription_reminder_sent', tenantId: sub.tenantId, plan: sub.plan, daysLeft })
     } catch (err) {
       logger.error({ event: 'subscription_reminder_failed', tenantId: sub.tenantId, err })
+    }
+  }
+
+  // ── Lapse → grace transition (WP-11) ───────────────────────────────────────
+  // Subscriptions that have passed their expiresAt and are still 'active'
+  // are transitioned to GRACE mode. Audit + status flip commit in one tx.
+  const lapsed = await db.subscription.findMany({
+    where: {
+      status:    'active',
+      plan:      { not: 'free' },
+      expiresAt: { lt: now },
+    },
+    include: { tenant: true },
+  })
+
+  const graceUntil = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) // 7-day grace window
+
+  for (const sub of lapsed) {
+    try {
+      await withTenant(sub.tenantId, async (tx) => {
+        await tx.subscription.update({
+          where: { id: sub.id },
+          data:  { status: 'grace', graceUntil },
+        })
+        await insertAuditLog(tx, {
+          tenantId:  sub.tenantId,
+          action:    'subscription.grace',
+          entityType: 'subscription',
+          entityId:   sub.id,
+          oldValue:  { status: 'active', expiresAt: sub.expiresAt?.toISOString() ?? null },
+          newValue:  { status: 'grace', graceUntil: graceUntil.toISOString() },
+          source:    'scheduler',
+        })
+      })
+
+      // Fire-and-forget outside the tx: notify the owner
+      await sendTextMessage(
+        sub.tenant.ownerPhone,
+        `Your Gezi AI ${sub.plan} plan has lapsed. You are now in grace mode — you can view reports but cannot record new sales or purchases. Reply PAY to renew.`,
+      )
+
+      logger.info({
+        event:      'subscription_grace_activated',
+        tenantId:   sub.tenantId,
+        plan:       sub.plan,
+        graceUntil: graceUntil.toISOString(),
+      })
+    } catch (err) {
+      logger.error({ event: 'subscription_grace_failed', tenantId: sub.tenantId, err })
     }
   }
 }

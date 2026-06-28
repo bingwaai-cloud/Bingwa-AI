@@ -13,6 +13,7 @@ import { ordersRouter } from './orders.js'
 import { draftsRouter } from './drafts.js'
 import { authenticate } from '../middleware/auth.js'
 import { tenantMiddleware } from '../middleware/tenant.js'
+import { graceMiddleware } from '../middleware/grace.js'
 
 /**
  * Root API router — all routes under /api.
@@ -43,9 +44,9 @@ apiRouter.use('/payments', paymentCallbackRouter)
 
 // ─── Authenticated + tenant-scoped routes ────────────────────────────────────
 
-apiRouter.use('/v1/sales',      authenticate, tenantMiddleware, salesRouter)
+apiRouter.use('/v1/sales',      authenticate, tenantMiddleware, graceMiddleware, salesRouter)
 apiRouter.use('/v1/inventory',  authenticate, tenantMiddleware, inventoryRouter)
-apiRouter.use('/v1/purchases',  authenticate, tenantMiddleware, purchasesRouter)
+apiRouter.use('/v1/purchases',  authenticate, tenantMiddleware, graceMiddleware, purchasesRouter)
 apiRouter.use('/v1/suppliers',  authenticate, tenantMiddleware, suppliersRouter)
 apiRouter.use('/v1/payments',   authenticate, tenantMiddleware, paymentsRouter)
 apiRouter.use('/v1/customers',  authenticate, tenantMiddleware, customersRouter)

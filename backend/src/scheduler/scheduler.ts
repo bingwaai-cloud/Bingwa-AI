@@ -8,6 +8,7 @@ import {
   sendWeeklyReport,
   sendSubscriptionReminders,
 } from '../reports/reportService.js'
+import { runReconciliation } from './reconciliation.js'
 import {
   checkPendingPaymentTimeout,
   checkPendingAirtelPaymentTimeout,
@@ -176,6 +177,19 @@ export function startScheduler(): void {
     { timezone: TIMEZONE }
   )
 
+  // ── Payment reconciliation: daily 02:00 EAT (WP-11) ──────────────────────────
+  // Compares our payment_transactions (last 48h) against provider records.
+  // Mismatches logged + row parked via markPaymentNeedsReview with in-tx audit.
+  cron.schedule(
+    '0 2 * * *',
+    () => {
+      void runReconciliation().catch((err) => {
+        logger.error({ event: 'reconciliation_job_failed', err })
+      })
+    },
+    { timezone: TIMEZONE }
+  )
+
   // ── Payment timeout check: every 15 minutes ───────────────────────────────────
   // Polls MTN for payments that have been pending > 10 min without a callback
   cron.schedule(
@@ -203,6 +217,7 @@ export function startScheduler(): void {
       'sub_reminders     @ 09:00 EAT daily',
       'auto_renewal      @ 09:05 EAT daily',
       'payment_timeout   @ every 15 min',
+      'reconciliation    @ 02:00 EAT daily',
     ],
   })
 }

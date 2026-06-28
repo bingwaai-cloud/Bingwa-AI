@@ -105,6 +105,7 @@ async function activateSubscription(
         expiresAt,
         paymentMethod,
         paymentPhone,
+        graceUntil:    null,  // clear grace on renewal (WP-11)
       },
     })
   } else {
