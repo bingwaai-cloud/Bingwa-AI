@@ -4,7 +4,7 @@ import type { ParsedIntent } from '../../src/nlp/types.js'
 const sendTextMessage = jest.fn<() => Promise<void>>()
 const parseIntent = jest.fn<() => Promise<ParsedIntent>>()
 
-jest.unstable_mockModule('../../src/whatsapp/whatsappClient.js', () => ({
+jest.unstable_mockModule('../../src/channels/whatsapp/whatsappClient.js', () => ({
   sendTextMessage,
   markMessageRead: jest.fn(),
 }))
@@ -15,8 +15,8 @@ jest.unstable_mockModule('../../src/nlp/intentParser.js', () => ({
 
 const { db, withTenant } = await import('../../src/db.js')
 const { cleanupTenant, createTestTenant, seedItem } = await import('../fixtures/tenant.js')
-const { handleIncomingMessage } = await import('../../src/whatsapp/echoBot.js')
-const { processIncomingText } = await import('../../src/whatsapp/messageProcessor.js')
+const { handleIncomingMessage } = await import('../../src/channels/whatsapp/echoBot.js')
+const { processIncomingText } = await import('../../src/channels/whatsapp/messageProcessor.js')
 
 const TENANT_ID = 'd1b2c3d4-0000-0000-0000-0000000000c1'
 const PHONE = '+256700000403'

@@ -1,19 +1,19 @@
 import { handleIncomingMessage } from './echoBot.js'
 import { markMessageRead, sendTextMessage } from './whatsappClient.js'
-import { logger } from '../utils/logger.js'
-import { normalizePhone } from '../utils/phone.js'
+import { logger } from '../../utils/logger.js'
+import { normalizePhone } from '../../utils/phone.js'
 import {
   resolveTenant,
   handleSwitchCommand,
   type ResolutionResult,
-} from '../services/tenantResolutionService.js'
+} from '../../services/tenantResolutionService.js'
 import {
   resolvePendingDraftMessage,
   resolveConfirmDefaultMessage,
   type DraftCommitResult,
-} from '../services/draftsService.js'
-import { AppError } from '../utils/AppError.js'
-import { formatUGX, formatUGXShort } from '../nlp/normalizers.js'
+} from '../../services/draftsService.js'
+import { AppError } from '../../utils/AppError.js'
+import { formatUGX, formatUGXShort } from '../../nlp/normalizers.js'
 
 // ─── Meta webhook payload types ───────────────────────────────────────────────
 
@@ -244,7 +244,7 @@ async function sendNonTextReply(from: string, messageId: string): Promise<void> 
  * Resolves all tenants for the sender's phone and opts out across all.
  */
 async function handleStopRequest(fromPhone: string): Promise<void> {
-  const { setMarketingOptIn } = await import('../services/marketingService.js')
+  const { setMarketingOptIn } = await import('../../services/marketingService.js')
 
   const phone = normalizePhone(fromPhone)
   const resolution = await resolveTenant(phone)
@@ -264,7 +264,7 @@ async function handleStopRequest(fromPhone: string): Promise<void> {
  * Resolves all tenants for the sender's phone and opts in across the active one.
  */
 async function handleStartRequest(fromPhone: string): Promise<void> {
-  const { setMarketingOptIn } = await import('../services/marketingService.js')
+  const { setMarketingOptIn } = await import('../../services/marketingService.js')
 
   const phone = normalizePhone(fromPhone)
   const resolution = await resolveTenant(phone)

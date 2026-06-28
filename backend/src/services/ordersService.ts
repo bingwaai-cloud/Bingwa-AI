@@ -23,7 +23,7 @@ import {
   insertAuditLog,
 } from '../repositories/itemRepository.js'
 import { findTenantById } from '../repositories/tenantRepository.js'
-import { sendTextMessage } from '../whatsapp/whatsappClient.js'
+import { sendTextMessage } from '../channels/whatsapp/whatsappClient.js'
 
 export interface PlaceOrderParams {
   platformSupplierId: string

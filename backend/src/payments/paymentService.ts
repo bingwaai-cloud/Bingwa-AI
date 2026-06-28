@@ -13,7 +13,7 @@ import { db, withTenant } from '../db.js'
 import { logger } from '../utils/logger.js'
 import { AppError, ErrorCodes } from '../utils/AppError.js'
 import { normalizePhone, isAirtel } from '../utils/phone.js'
-import { sendTextMessage } from '../whatsapp/whatsappClient.js'
+import { sendTextMessage } from '../channels/whatsapp/whatsappClient.js'
 import { insertAuditLog } from '../utils/audit.js'
 import {
   initiateCollection,

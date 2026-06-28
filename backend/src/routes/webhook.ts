@@ -1,8 +1,8 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import rateLimit from 'express-rate-limit'
-import { verifyMetaSignature } from '../whatsapp/verifySignature.js'
-import { processWebhookPayload, type MetaWebhookBody } from '../whatsapp/messageProcessor.js'
+import { verifyMetaSignature } from '../channels/whatsapp/verifySignature.js'
+import { processWebhookPayload, type MetaWebhookBody } from '../channels/whatsapp/messageProcessor.js'
 import { asyncHandler } from '../middleware/asyncHandler.js'
 import { logger } from '../utils/logger.js'
 

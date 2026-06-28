@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { AppError, ErrorCodes } from '../utils/AppError.js'
 import { logger } from '../utils/logger.js'
 import { withTenant } from '../db.js'
-import { sendTextMessage } from '../whatsapp/whatsappClient.js'
+import { sendTextMessage } from '../channels/whatsapp/whatsappClient.js'
 import {
   findOptedInPhones,
   optInMarketing,

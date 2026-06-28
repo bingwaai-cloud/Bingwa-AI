@@ -7,11 +7,11 @@ const resolveConfirmDefaultMessage = jest.fn<() => Promise<unknown>>()
 const resolveTenant = jest.fn<() => Promise<unknown>>()
 const handleSwitchCommand = jest.fn<() => Promise<unknown>>()
 
-jest.unstable_mockModule('../../../src/whatsapp/echoBot.js', () => ({
+jest.unstable_mockModule('../../../src/channels/whatsapp/echoBot.js', () => ({
   handleIncomingMessage,
 }))
 
-jest.unstable_mockModule('../../../src/whatsapp/whatsappClient.js', () => ({
+jest.unstable_mockModule('../../../src/channels/whatsapp/whatsappClient.js', () => ({
   markMessageRead: jest.fn(),
   sendTextMessage,
 }))
@@ -29,7 +29,7 @@ jest.unstable_mockModule('../../../src/services/draftsService.js', () => ({
 let processIncomingText: (from: string, text: string, messageId: string) => Promise<void>
 
 beforeAll(async () => {
-  const mod = await import('../../../src/whatsapp/messageProcessor.js')
+  const mod = await import('../../../src/channels/whatsapp/messageProcessor.js')
   processIncomingText = mod.processIncomingText
 })
 

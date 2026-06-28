@@ -34,7 +34,7 @@ import type { ProviderTransaction } from '../../src/payments/PaymentProvider.js'
 // ── Mock external I/O (register BEFORE dynamic imports) ───────────────────────
 
 // Mock WhatsApp client
-jest.unstable_mockModule('../../src/whatsapp/whatsappClient.js', () => ({
+jest.unstable_mockModule('../../src/channels/whatsapp/whatsappClient.js', () => ({
   sendTextMessage: jest.fn().mockImplementation(() => Promise.resolve()),
   markMessageRead: jest.fn().mockImplementation(() => Promise.resolve()),
 }))
@@ -57,7 +57,7 @@ jest.unstable_mockModule('../../src/payments/providerRegistry.js', () => ({
 // ── Dynamic imports (after mock registration) ─────────────────────────────────
 
 const { createApp }               = await import('../../src/app.js')
-const whatsappModule              = await import('../../src/whatsapp/whatsappClient.js')
+const whatsappModule              = await import('../../src/channels/whatsapp/whatsappClient.js')
 const reconciler                   = await import('../../src/scheduler/reconciliation.js')
 const { sendSubscriptionReminders } = await import('../../src/reports/reportService.js')
 

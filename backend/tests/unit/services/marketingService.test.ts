@@ -17,7 +17,7 @@ jest.unstable_mockModule('../../../src/repositories/customersRepository.js', () 
 jest.unstable_mockModule('../../../src/utils/logger.js', () => ({
   logger: { info: loggerInfo, warn: jest.fn(), error: jest.fn() },
 }))
-jest.unstable_mockModule('../../../src/whatsapp/whatsappClient.js', () => ({
+jest.unstable_mockModule('../../../src/channels/whatsapp/whatsappClient.js', () => ({
   sendTextMessage: jest.fn(),
 }))
 

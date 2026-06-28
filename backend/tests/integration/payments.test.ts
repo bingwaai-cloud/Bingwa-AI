@@ -37,7 +37,7 @@ jest.unstable_mockModule('axios', () => {
 })
 
 // Mock WhatsApp client — paymentService calls sendTextMessage on success/failure
-jest.unstable_mockModule('../../src/whatsapp/whatsappClient.js', () => ({
+jest.unstable_mockModule('../../src/channels/whatsapp/whatsappClient.js', () => ({
   sendTextMessage: jest.fn().mockImplementation(() => Promise.resolve()),
   markMessageRead: jest.fn().mockImplementation(() => Promise.resolve()),
 }))
@@ -46,7 +46,7 @@ jest.unstable_mockModule('../../src/whatsapp/whatsappClient.js', () => ({
 
 const { createApp }        = await import('../../src/app.js')
 const axiosModule          = await import('axios')
-const whatsappModule       = await import('../../src/whatsapp/whatsappClient.js')
+const whatsappModule       = await import('../../src/channels/whatsapp/whatsappClient.js')
 const { _clearTokenCache } = await import('../../src/payments/momoClient.js')
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
