@@ -1,3 +1,5 @@
+import { exec as execCb } from 'child_process'
+import { promisify } from 'util'
 import cron from 'node-cron'
 import type { Tenant } from '@prisma/client'
 import { db } from '../db.js'
@@ -18,6 +20,8 @@ import {
 import { selectedProviderName } from '../payments/providerRegistry.js'
 import { getQualityProvider } from '../channels/whatsapp/whatsappQualityProvider.js'
 import { setBroadcastsPaused } from '../services/marketingService.js'
+
+const execAsync = promisify(execCb)
 
 const TIMEZONE = 'Africa/Kampala'
 
@@ -170,6 +174,39 @@ export async function runQualityMonitor(): Promise<void> {
 }
 
 /**
+ * Weekly encrypted database backup (WP-15).
+ * Spawns scripts/backup.ts as a child process so it runs in its own env with
+ * PGPASSWORD isolation. The backup script handles its own logging (backup_succeeded
+ * / backup_failed). This wrapper catches spawn-level failures only.
+ */
+async function runScheduledBackup(): Promise<void> {
+  const required = ['OWNER_DATABASE_URL', 'BACKUP_ENCRYPTION_KEY',
+    'BACKUP_S3_ENDPOINT', 'BACKUP_S3_BUCKET',
+    'BACKUP_S3_ACCESS_KEY', 'BACKUP_S3_SECRET_KEY', 'BACKUP_S3_REGION']
+
+  const missing = required.filter((k) => !process.env[k])
+  if (missing.length > 0) {
+    logger.error({ event: 'backup_skipped_missing_env', missing })
+    return
+  }
+
+  try {
+    // npx tsx runs the TypeScript file directly — works in both dev and prod
+    // (prod must have tsx installed or we ship compiled JS)
+    const { stdout, stderr } = await execAsync('npx tsx scripts/backup.ts', {
+      env: process.env, // inherits all env vars including secrets
+      timeout: 600_000, // 10 min
+      windowsHide: true,
+    })
+    if (stdout) logger.info({ event: 'backup_stdout', output: stdout.trim() })
+    if (stderr) logger.warn({ event: 'backup_stderr', output: stderr.trim() })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    logger.error({ event: 'backup_job_spawn_failed', err: msg })
+  }
+}
+
+/**
  * Register all cron jobs and start the scheduler.
  * Call once at server startup.
  */
@@ -267,6 +304,19 @@ export function startScheduler(): void {
     { timezone: TIMEZONE }
   )
 
+  // ── Weekly encrypted backup: Sunday 03:00 EAT (WP-15) ──────────────────────
+  // pg_dump -Fc (OWNER connection) → openssl aes-256-cbc → S3 append-only.
+  // Success logged as backup_succeeded; failure is loud (logger.error + stub alert).
+  cron.schedule(
+    '0 3 * * 0',
+    () => {
+      void runScheduledBackup().catch((err) => {
+        logger.error({ event: 'backup_job_unhandled', err })
+      })
+    },
+    { timezone: TIMEZONE }
+  )
+
   logger.info({
     event: 'scheduler_started',
     timezone: TIMEZONE,
@@ -279,6 +329,7 @@ export function startScheduler(): void {
       'payment_timeout   @ every 15 min',
       'reconciliation    @ 02:00 EAT daily',
       'quality_monitor   @ :30 every hour',
+      'encrypted_backup  @ 03:00 EAT Sunday',
     ],
   })
 }

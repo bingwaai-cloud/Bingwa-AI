@@ -117,10 +117,53 @@ app.use((req, res, next) => {
 ```
 
 ## Backup strategy
+
+### Scheduled backups (WP-15)
 PostgreSQL: Railway auto-backup daily (7-day retention) PLUS weekly
-encrypted export to external object storage (GCS/S3) retained ≥ 7 years
+encrypted export to external object storage (S3-compatible) retained ≥ 7 years
 (tax-grade financial data). A restore is TESTED quarterly — an untested
 backup is not a backup. RPO 24h, RTO 4h.
+
+**Pipeline**: `pg_dump -Fc` (custom format, OWNER connection — bypasses RLS) →
+`openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_ENCRYPTION_KEY` →
+S3 putObject (append-only: `gezi/backups/YYYY/MM/DD-HHmm.dump.enc`).
+
+**Schedule**: Sunday 03:00 EAT (Africa/Kampala), registered in scheduler.ts.
+
+**Retention**: ≥ 7 years, enforced at the **bucket level**:
+- S3 Lifecycle rule: transition to cheaper storage after 90 days, never delete
+  before 2557 days.
+- S3 Object Lock (WORM): objects cannot be deleted or overwritten before the
+  legal window expires.
+- The backup script is **append-only** — it has NO delete/overwrite code path.
+
+**Container dependencies** (Railway/prod): the Node.js base image does NOT
+include `pg_dump` or `openssl`. You MUST install them in the deploy image:
+```dockerfile
+# In your Dockerfile / Railway build step:
+RUN apt-get update && apt-get install -y postgresql-client-15 openssl
+```
+PostgreSQL major version (15) must match the server. Check after install:
+`pg_dump --version` should report PostgreSQL 15.x.
+
+**Manual backup**: `cd backend && npx tsx scripts/backup.ts`
+
+**Restore runbook**: [docs/runbooks/restore.md](../../docs/runbooks/restore.md)
+
+### Monitoring
+- Look for `backup_succeeded` log event every Sunday. If absent, the
+  dead-man's-switch fires — a MISSING backup is the dangerous case.
+- All backup failures emit `logger.error` + a stub alert (never silent).
+
+### Required env vars
+```
+BACKUP_ENCRYPTION_KEY=    # AES-256 key (generate: openssl rand -hex 32)
+BACKUP_S3_ENDPOINT=       # S3-compatible endpoint URL
+BACKUP_S3_BUCKET=         # Bucket name
+BACKUP_S3_ACCESS_KEY=     # Access key ID
+BACKUP_S3_SECRET_KEY=     # Secret access key
+BACKUP_S3_REGION=auto     # Region (or "auto" for some providers)
+```
 
 ## WhatsApp webhook URL setup
 Production webhook serves 360dialog (Cloud API-compatible payloads).
