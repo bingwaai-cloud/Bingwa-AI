@@ -64,6 +64,23 @@ async function resolveTenant(phone: string): Promise<Tenant[]> { /* all membersh
 // If >1 membership: use last-active context; support "switch <business>" command.
 ```
 
+## RLS exceptions (deliberate — no RLS on pre-context lookup tables)
+The following tables live OUTSIDE RLS because they must be queryable BEFORE
+tenant context is set (phone → tenant resolution, auth, etc.):
+
+- **`tenants`** (public.tenants) — ownerPhone → tenant lookup for signup/auth.
+- **`tenant_users`** (public.tenant_users, WP-12) — phone → memberships lookup.
+  Every membership query is scoped to the **verified sender phone** from the
+  WhatsApp webhook — there must be NO code path that reads membership rows from
+  unverified input (no `findMany({})`, no listing all memberships by tenantId
+  that came from user input, etc.). Phone comes from `normalizePhone()` on the
+  Meta webhook payload's `from` field; it is NEVER derived from the message body.
+- **`subscriptions`**, **`payment_transactions`**, **`platform_suppliers`** —
+  cross-tenant / non-tenant-scoped tables.
+
+All other tables (items, sales, purchases, etc.) MUST have ENABLE + FORCE RLS
++ tenant_isolation policy.
+
 ## Rules every model must follow
 1. Never write a repository function without a tenantId parameter
 2. Never findMany/queryRaw without tenant_id in the WHERE

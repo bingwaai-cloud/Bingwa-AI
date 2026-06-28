@@ -2,7 +2,11 @@ import { handleIncomingMessage } from './echoBot.js'
 import { markMessageRead, sendTextMessage } from './whatsappClient.js'
 import { logger } from '../utils/logger.js'
 import { normalizePhone } from '../utils/phone.js'
-import { findTenantByOwnerPhone } from '../repositories/tenantRepository.js'
+import {
+  resolveTenant,
+  handleSwitchCommand,
+  type ResolutionResult,
+} from '../services/tenantResolutionService.js'
 import {
   resolvePendingDraftMessage,
   resolveConfirmDefaultMessage,
@@ -128,33 +132,61 @@ export async function processWebhookPayload(body: MetaWebhookBody): Promise<void
 
 export async function processIncomingText(from: string, text: string, messageId: string): Promise<void> {
   const phone = normalizePhone(from)
-  const tenant = await findTenantByOwnerPhone(phone)
 
-  if (tenant) {
-    try {
-      // WP-14: confirm-default reversal (NO / nedda / hapana within 10-min window)
-      const reversal = await resolveConfirmDefaultMessage(tenant.id, phone, text)
-      if (reversal) {
-        await sendTextMessage(phone, reversal.reply)
-        return
-      }
-
-      // WP-13 moves this thin service delegation to the shared /api/v1 channels adapter.
-      const resolution = await resolvePendingDraftMessage(tenant.id, phone, text)
-      if (resolution) {
-        await sendTextMessage(phone, formatDraftResolution(resolution))
-        return
-      }
-    } catch (err) {
-      if (err instanceof AppError) {
-        await sendTextMessage(phone, err.message)
-        return
-      }
-      throw err
-    }
+  // ── "switch" command ────────────────────────────────────────────────────
+  const trimmed = text.trim()
+  if (trimmed.toLowerCase().startsWith('switch')) {
+    const arg = trimmed.slice('switch'.length).trim() || undefined
+    const result = await handleSwitchCommand(phone, arg)
+    await sendTextMessage(phone, result.message)
+    return
   }
 
-  await handleIncomingMessage(from, text, messageId)
+  // ── Multi-tenant resolution ─────────────────────────────────────────────
+  const resolution = await resolveTenant(phone)
+
+  if (!resolution) {
+    // 0 memberships: send registration message
+    await handleIncomingMessage(from, text, messageId)
+    return
+  }
+
+  try {
+    // WP-14: confirm-default reversal (NO / nedda / hapana within 10-min window)
+    const reversal = await resolveConfirmDefaultMessage(resolution.tenantId, phone, text)
+    if (reversal) {
+      await sendTextMessage(phone, maybePrefixBusiness(reversal.reply, resolution))
+      return
+    }
+
+    // WP-13: resolve pending drafts
+    const draftResult = await resolvePendingDraftMessage(resolution.tenantId, phone, text)
+    if (draftResult) {
+      await sendTextMessage(phone, maybePrefixBusiness(formatDraftResolution(draftResult), resolution))
+      return
+    }
+  } catch (err) {
+    if (err instanceof AppError) {
+      await sendTextMessage(phone, maybePrefixBusiness(err.message, resolution))
+      return
+    }
+    throw err
+  }
+
+  // Delegate to NLP handler with resolution context
+  await handleIncomingMessage(from, text, messageId, resolution)
+}
+
+/**
+ * When the user has >1 business, prefix the reply with the active business name.
+ */
+function maybePrefixBusiness(reply: string, resolution: ResolutionResult): string {
+  if (!resolution.hasMultipleBusinesses) return reply
+  // Only prefix confirmation-style replies (those starting with common markers)
+  if (/^[✅⚠️📦↩️📢☀️]/.test(reply) || reply.startsWith('Sale') || reply.startsWith('Purchase') || reply.startsWith('Expense')) {
+    return `[${resolution.businessName}] ${reply}`
+  }
+  return reply
 }
 
 function formatDraftResolution(result: DraftCommitResult): string {
@@ -209,16 +241,16 @@ async function sendNonTextReply(from: string, messageId: string): Promise<void> 
 
 /**
  * Handle a STOP message: opt the customer out of marketing broadcasts.
- * Looks up the tenant by the sender's phone, then updates opted_in_marketing = false.
+ * Resolves all tenants for the sender's phone and opts out across all.
  */
 async function handleStopRequest(fromPhone: string): Promise<void> {
   const { setMarketingOptIn } = await import('../services/marketingService.js')
 
   const phone = normalizePhone(fromPhone)
-  const tenant = await findTenantByOwnerPhone(phone)
+  const resolution = await resolveTenant(phone)
 
-  if (tenant) {
-    await setMarketingOptIn(tenant.id, phone, false)
+  if (resolution) {
+    await setMarketingOptIn(resolution.tenantId, phone, false)
   }
 
   await sendTextMessage(
@@ -229,16 +261,16 @@ async function handleStopRequest(fromPhone: string): Promise<void> {
 
 /**
  * Handle a START message: opt the customer back in to marketing broadcasts.
- * Looks up the customer record by phone and sets opted_in_marketing = true.
+ * Resolves all tenants for the sender's phone and opts in across the active one.
  */
 async function handleStartRequest(fromPhone: string): Promise<void> {
   const { setMarketingOptIn } = await import('../services/marketingService.js')
 
   const phone = normalizePhone(fromPhone)
-  const tenant = await findTenantByOwnerPhone(phone)
+  const resolution = await resolveTenant(phone)
 
-  if (tenant) {
-    await setMarketingOptIn(tenant.id, phone, true)
+  if (resolution) {
+    await setMarketingOptIn(resolution.tenantId, phone, true)
   }
 
   await sendTextMessage(

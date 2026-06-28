@@ -8,6 +8,7 @@ import { maskPhone, normalizePhone } from '../utils/phone.js'
 import { withTenant } from '../db.js'
 import * as tenantRepo from '../repositories/tenantRepository.js'
 import * as userRepo from '../repositories/userRepository.js'
+import { createMembership, switchActiveContext } from '../repositories/tenantUserRepository.js'
 import type { JwtPayload } from '../middleware/auth.js'
 
 const ACCESS_TOKEN_TTL = '15m'
@@ -104,6 +105,15 @@ export async function signup(input: SignupInput): Promise<AuthResult> {
   }
 
   await tenantRepo.createFreeSubscription(tenant.id)
+
+  // WP-12: create tenant_users membership row for the owner
+  try {
+    await createMembership(tenant.id, phone, 'owner')
+    await switchActiveContext(tenant.id, phone)
+  } catch (err) {
+    logger.warn({ event: 'signup_tenant_user_creation_failed', tenantId: tenant.id, err })
+    // Non-fatal: tenant creation succeeded; membership can be repaired.
+  }
 
   const jwtPayload: JwtPayload = { userId: user.id, tenantId: tenant.id, role: 'owner' }
   const { accessToken, refreshToken } = buildTokens(jwtPayload)

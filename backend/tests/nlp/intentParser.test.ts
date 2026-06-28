@@ -11,8 +11,7 @@ import { buildMockContext } from '../fixtures/context.js'
 
 function itLive(name: string, fn: () => Promise<void>): void {
   it(name, async () => {
-    if (!process.env['ANTHROPIC_API_KEY'] || !process.env['NLP_MODEL']) {
-      console.log(`[SKIP] ${name} -- set ANTHROPIC_API_KEY and NLP_MODEL to run live NLP tests`)
+    if (process.env['RUN_LIVE_NLP'] !== '1') {
       return
     }
     await fn()

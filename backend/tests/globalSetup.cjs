@@ -1,10 +1,28 @@
 /**
  * Jest globalSetup -- runs once before all suites.
  *
- * Row-level tenancy (P0-1): the integration tests expect the public-schema
- * tables (migration 004) and RLS (migration 006) to already exist. This setup
- * applies both, idempotently, as the DATABASE OWNER, then ensures the
- * non-superuser gezi_app role can log in.
+ * ═══════════════════ TEST DATABASE CONTRACT ═══════════════════════════════════
+ * The test database MUST be reproducible from scratch with TWO steps:
+ *
+ *   (1) BASELINE (Prisma-managed):
+ *       The single Prisma migration 20260405092934_global_schema_init creates
+ *       the global tables with camelCase columns (tenants, subscriptions,
+ *       payment_transactions, platform_suppliers). This is applied by running
+ *       `npx prisma migrate deploy --schema=db/schema.prisma` before jest.
+ *
+ *   (2) HAND-WRITTEN MIGRATIONS (this file):
+ *       The hand-written 00X_*.sql migrations are applied IN ORDER here.
+ *       They handle features not expressible in Prisma (RLS, CHECK constraints,
+ *       GENERATED columns, DO $$ blocks) and add per-tenant tables (004+).
+ *       EVERY new table-creating or schema-altering migration MUST be added
+ *       to the `files` array below in numeric order.
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *
+ * Migrations intentionally NOT included:
+ *   - 001_global_schema.sql — superseded by Prisma baseline (camelCase columns)
+ *   - 002_tenant_schema_template.sql — deprecated schema-per-tenant template, not used
+ *   - 005_consolidate_data.sql — copies data from per-tenant schemas into public;
+ *     no-op on a fresh test DB (no per-tenant schemas exist)
  *
  * Env:
  *   OWNER_DATABASE_URL   - owner/superuser connection used HERE to apply
@@ -15,9 +33,6 @@
  *                          cross-tenant denial tests would then fail to deny).
  *   TEST_DB_APP_PASSWORD - password set on gezi_app for the run
  *                          (default 'gezi_test_pw'); use the same in DATABASE_URL.
- *
- * Requires the global tables (public.tenants etc.) to already exist
- * (prisma migrate deploy / baseline) -- 004 has a FK to public.tenants.
  */
 const path = require('path')
 const fs = require('fs')
@@ -38,6 +53,10 @@ module.exports = async function globalSetup() {
 
   const migDir = path.resolve(__dirname, '../db/migrations')
   const files = [
+    // ── Global-schema additions (depend on Prisma baseline tables) ──────────
+    '003_platform_orders.sql',           // reliability_score on platform_suppliers + orders table
+
+    // ── Per-tenant row-level tables + RLS ───────────────────────────────────
     '004_consolidate_tenants.sql',
     '006_enable_rls.sql',
     '007_add_actor_user_id.sql',
@@ -49,6 +68,7 @@ module.exports = async function globalSetup() {
     '013_global_alias_sentinel_tenant.sql',
     '014_payment_status_check.sql',
     '015_subscription_grace.sql',
+    '016_tenant_users.sql',
   ]
 
   const client = new Client({ connectionString: ownerUrl })

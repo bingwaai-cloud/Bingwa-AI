@@ -37,6 +37,17 @@ export async function createTestTenant(t: {
       currency: 'UGX',
     },
   })
+  // WP-12: create tenant_users membership for the owner
+  await db.tenantUser.upsert({
+    where: { tenantId_phone: { tenantId: t.id, phone: t.ownerPhone } },
+    update: {},
+    create: {
+      tenantId: t.id,
+      phone: t.ownerPhone,
+      role: 'owner',
+      isActiveContext: true,
+    },
+  })
   return { tenantId: t.id, ownerPhone: t.ownerPhone }
 }
 
@@ -105,6 +116,7 @@ export async function cleanupTenant(tenantId: string): Promise<void> {
     await tx.item.deleteMany({})
   })
   // Global tables with FK to tenants (not RLS-scoped).
+  await db.tenantUser.deleteMany({ where: { tenantId } }).catch(() => undefined)
   await db.paymentTransaction.deleteMany({ where: { tenantId } }).catch(() => undefined)
   await db.subscription.deleteMany({ where: { tenantId } }).catch(() => undefined)
   await db.tenant.delete({ where: { id: tenantId } }).catch(() => undefined)

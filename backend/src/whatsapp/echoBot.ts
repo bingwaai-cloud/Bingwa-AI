@@ -1,6 +1,5 @@
 import { sendTextMessage } from './whatsappClient.js'
 import { withTenant } from '../db.js'
-import { findTenantByOwnerPhone } from '../repositories/tenantRepository.js'
 import { findAllItems } from '../repositories/itemRepository.js'
 import { findSales } from '../repositories/salesRepository.js'
 import { upsertUserContext, saveInteractionPair } from '../repositories/userContextRepository.js'
@@ -15,6 +14,7 @@ import { createSupplierRecord } from '../services/suppliersService.js'
 import { recordExpense } from '../services/expensesService.js'
 import { createDraft } from '../services/draftsService.js'
 import { previewBroadcast, sendBroadcast } from '../services/marketingService.js'
+import { resolveTenant, type ResolutionResult } from '../services/tenantResolutionService.js'
 import { logger } from '../utils/logger.js'
 import { normalizePhone, maskPhone } from '../utils/phone.js'
 import type { UserContext, InventoryItem, ParsedIntent, ParsedLineItem } from '../nlp/types.js'
@@ -27,11 +27,15 @@ const CONFIRM_DEFAULT_WINDOW_MS = 10 * 60 * 1000 // 10 minutes
  * Row-level tenancy: direct repository reads/writes run through withTenant()
  * (RLS-scoped). Service calls take only tenantId -- they open their own
  * withTenant internally.
+ *
+ * @param resolution Optional pre-resolved tenant context from messageProcessor.
+ *   When omitted (e.g. registration flow), falls back to resolving by phone.
  */
 export async function handleIncomingMessage(
   fromPhone: string,
   messageText: string,
-  messageId: string
+  messageId: string,
+  resolution?: ResolutionResult
 ): Promise<void> {
   const phone = normalizePhone(fromPhone)
 
@@ -42,19 +46,25 @@ export async function handleIncomingMessage(
     preview: messageText.slice(0, 60),
   })
 
-  const tenant = await findTenantByOwnerPhone(phone)
-
-  if (!tenant) {
-    await sendTextMessage(
-      phone,
-      "Hi! I'm Gezi AI 🏆\nTo get started, sign up at gezi.ai or ask your shop owner to add you as a user."
-    )
-    logger.info({ event: 'whatsapp_unknown_sender', phone: maskPhone(phone) })
-    return
+  // Resolve tenant if not provided (registration/no-membership path)
+  if (!resolution) {
+    const resolved = await resolveTenant(phone)
+    if (!resolved) {
+      await sendTextMessage(
+        phone,
+        "Hi! I'm Gezi AI 🏆\nTo get started, sign up at gezi.ai or ask your shop owner to add you as a user."
+      )
+      logger.info({ event: 'whatsapp_unknown_sender', phone: maskPhone(phone) })
+      return
+    }
+    resolution = resolved
   }
 
-  const contextRecord = await withTenant(tenant.id, (tx) => upsertUserContext(tx, tenant.id, phone))
-  const dbItems = await withTenant(tenant.id, (tx) => findAllItems(tx, tenant.id))
+  const tenantId = resolution.tenantId
+  const businessName = resolution.businessName
+
+  const contextRecord = await withTenant(tenantId, (tx) => upsertUserContext(tx, tenantId, phone))
+  const dbItems = await withTenant(tenantId, (tx) => findAllItems(tx, tenantId))
 
   const inventoryItems: InventoryItem[] = dbItems.map((i) => ({
     id: i.id,
@@ -69,14 +79,14 @@ export async function handleIncomingMessage(
   }))
 
   const userContext: UserContext = {
-    tenantId: tenant.id,
+    tenantId,
     userPhone: phone,
     tenant: {
-      businessName: tenant.businessName,
-      businessType: tenant.businessType ?? null,
-      ownerName: tenant.ownerName,
-      currency: tenant.currency,
-      country: tenant.country,
+      businessName,
+      businessType: resolution.businessType ?? null,
+      ownerName: resolution.ownerName,
+      currency: resolution.currency,
+      country: resolution.country,
     },
     items: inventoryItems,
     recentInteractions: contextRecord.interactionLog,
@@ -89,7 +99,7 @@ export async function handleIncomingMessage(
 
   logger.info({
     event: 'intent_parsed',
-    tenantId: tenant.id,
+    tenantId: tenantId,
     action: intent.action,
     confidence: intent.confidence,
     resolution: intent.resolution,
@@ -106,7 +116,7 @@ export async function handleIncomingMessage(
         intent.clarificationQuestion ??
         "Sorry, I didn't understand that.\nTry: 'sold 2 sugar at 6500' or 'bought 10 flour at 70k each'"
       if (intent.resolution === 'clarify' && (intent.action === 'sale' || intent.action === 'purchase' || intent.action === 'expense')) {
-        await createDraft(tenant.id, {
+        await createDraft(tenantId, {
           userPhone: phone,
           action: intent.action,
           payload: intent,
@@ -115,28 +125,28 @@ export async function handleIncomingMessage(
         })
       }
     } else if (intent.action === 'sale') {
-      const result = await handleSaleIntent(tenant.id, phone, intent, inventoryItems)
+      const result = await handleSaleIntent(tenantId, phone, intent, inventoryItems)
       reply = result.reply
       committedEntityId = result.saleId
       committedEntityType = 'sale'
     } else if (intent.action === 'purchase') {
-      reply = await handlePurchaseIntent(tenant.id, phone, intent, inventoryItems)
+      reply = await handlePurchaseIntent(tenantId, phone, intent, inventoryItems)
     } else if (intent.action === 'stock_check') {
-      reply = await handleStockCheck(tenant.id, intent, inventoryItems)
+      reply = await handleStockCheck(tenantId, intent, inventoryItems)
     } else if (intent.action === 'add_item') {
-      reply = await handleAddItem(tenant.id, intent)
+      reply = await handleAddItem(tenantId, intent)
     } else if (intent.action === 'report') {
-      reply = await handleReport(tenant.id)
+      reply = await handleReport(tenantId)
     } else if (intent.action === 'customer_add') {
-      reply = await handleCustomerAdd(tenant.id, intent)
+      reply = await handleCustomerAdd(tenantId, intent)
     } else if (intent.action === 'supplier_add') {
-      reply = await handleSupplierAdd(tenant.id, intent)
+      reply = await handleSupplierAdd(tenantId, intent)
     } else if (intent.action === 'expense') {
-      reply = await handleExpense(tenant.id, intent)
+      reply = await handleExpense(tenantId, intent)
     } else if (intent.action === 'marketing') {
-      reply = await handleMarketing(tenant.id, phone, intent, tenant.businessName)
+      reply = await handleMarketing(tenantId, phone, intent, businessName)
     } else if (intent.action === 'receipt') {
-      reply = await handleReceipt(tenant.id, intent)
+      reply = await handleReceipt(tenantId, intent)
     } else if (intent.action === 'subscription') {
       reply = 'Subscription request received. We will show your plan options next.'
     } else {
@@ -147,7 +157,7 @@ export async function handleIncomingMessage(
     // After confirm_default commit: persist tracking draft in 'confirmed' state
     // so the user has a 10-minute window to reply "NO" and undo.
     if (intent.resolution === 'confirm_default' && (intent.action === 'sale' || intent.action === 'purchase' || intent.action === 'expense')) {
-      await createDraft(tenant.id, {
+      await createDraft(tenantId, {
         userPhone: phone,
         action: intent.action,
         payload: intent,
@@ -158,7 +168,7 @@ export async function handleIncomingMessage(
       })
     }
   } catch (err) {
-    logger.error({ event: 'whatsapp_dispatch_error', tenantId: tenant.id, err })
+    logger.error({ event: 'whatsapp_dispatch_error', tenantId: tenantId, err })
     const errMsg = err instanceof Error ? err.message : ''
     reply =
       errMsg.length > 0 && errMsg.length < 120
@@ -168,15 +178,15 @@ export async function handleIncomingMessage(
 
   await sendTextMessage(phone, reply)
 
-  withTenant(tenant.id, (tx) =>
-    saveInteractionPair(tx, tenant.id, phone, messageText, reply, intent.action, contextRecord.interactionLog)
+  withTenant(tenantId, (tx) =>
+    saveInteractionPair(tx, tenantId, phone, messageText, reply, intent.action, contextRecord.interactionLog)
   ).catch((err: unknown) => {
-    logger.warn({ event: 'context_save_failed', tenantId: tenant.id, err })
+    logger.warn({ event: 'context_save_failed', tenantId: tenantId, err })
   })
 
   logger.info({
     event: 'whatsapp_reply_sent',
-    tenantId: tenant.id,
+    tenantId: tenantId,
     phone: maskPhone(phone),
     action: intent.action,
   })

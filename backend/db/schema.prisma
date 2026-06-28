@@ -30,6 +30,7 @@ model Tenant {
   subscriptions       Subscription[]
   paymentTransactions PaymentTransaction[]
   platformSuppliers   PlatformSupplier[]
+  tenantUsers         TenantUser[]
 
   @@map("tenants")
 }
@@ -71,15 +72,16 @@ model PaymentTransaction {
 }
 
 model PlatformSupplier {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId   String?  @db.Uuid
-  name       String   @db.VarChar(255)
-  phone      String?  @db.VarChar(20)
-  location   String?  @db.VarChar(255)
-  categories String[]
-  verified   Boolean  @default(false)
-  createdAt  DateTime @default(now()) @db.Timestamptz()
-  updatedAt  DateTime @updatedAt @db.Timestamptz()
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String?  @db.Uuid
+  name              String   @db.VarChar(255)
+  phone             String?  @db.VarChar(20)
+  location          String?  @db.VarChar(255)
+  categories        String[]
+  verified          Boolean  @default(false)
+  reliabilityScore  Float    @default(0.80) @map("reliability_score")
+  createdAt         DateTime @default(now()) @db.Timestamptz()
+  updatedAt         DateTime @updatedAt @db.Timestamptz()
 
   tenant Tenant? @relation(fields: [tenantId], references: [id])
 
@@ -327,6 +329,24 @@ model User {
 
   @@index([tenantId])
   @@map("users")
+}
+
+model TenantUser {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  phone             String    @db.VarChar(20)
+  role              String    @default("cashier") @db.VarChar(20)
+  isActiveContext   Boolean   @default(false) @map("is_active_context")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz()
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, phone])
+  @@index([phone])
+  @@index([tenantId, phone])
+  @@map("tenant_users")
 }
 
 model ItemAlias {
