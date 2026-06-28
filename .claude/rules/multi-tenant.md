@@ -70,6 +70,10 @@ tenant context is set (phone → tenant resolution, auth, etc.):
 
 - **`tenants`** (public.tenants) — ownerPhone → tenant lookup for signup/auth.
 - **`tenant_users`** (public.tenant_users, WP-12) — phone → memberships lookup.
+- **`platform_settings`** (public.platform_settings, WP-14) — global flags
+  (e.g. broadcasts_paused) read by every tenant's sendBroadcast.
+- **`platform_marketing_opt_outs`** (public.platform_marketing_opt_outs, WP-14) —
+  phone-keyed cross-tenant opt-out registry for the shared WhatsApp number.
   Every membership query is scoped to the **verified sender phone** from the
   WhatsApp webhook — there must be NO code path that reads membership rows from
   unverified input (no `findMany({})`, no listing all memberships by tenantId

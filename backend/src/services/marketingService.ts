@@ -1,8 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { AppError, ErrorCodes } from '../utils/AppError.js'
 import { logger } from '../utils/logger.js'
-import { withTenant } from '../db.js'
+import { db, withTenant } from '../db.js'
 import { sendTextMessage } from '../channels/whatsapp/whatsappClient.js'
+import { normalizePhone } from '../utils/phone.js'
 import {
   findOptedInPhones,
   optInMarketing,
@@ -27,17 +28,144 @@ function getClient(): Anthropic {
   return _client
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function broadcastDailyCap(): number {
+  const raw = process.env['BROADCAST_DAILY_CAP']
+  if (raw === undefined || raw === '') return 1
+  const parsed = parseInt(raw, 10)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 1
+}
+
+/**
+ * Check the global broadcast-pause flag (platform_settings, no RLS).
+ * Reads outside any tenant transaction — this is a platform-wide gate.
+ */
+async function isBroadcastsGloballyPaused(): Promise<boolean> {
+  try {
+    const row = await db.platformSetting.findFirst({ where: { id: 1 } })
+    return row?.broadcastsPaused === true
+  } catch {
+    // If the table doesn't exist or query fails, default to NOT paused (safe).
+    return false
+  }
+}
+
+/**
+ * Set the global broadcast-pause flag.
+ * Called by the quality monitor scheduler — NOT by tenant-path code.
+ */
+export async function setBroadcastsPaused(paused: boolean, reason?: string): Promise<void> {
+  await db.platformSetting.upsert({
+    where: { id: 1 },
+    create: {
+      id: 1,
+      broadcastsPaused: paused,
+      pausedReason: paused ? (reason ?? null) : null,
+      pausedAt: paused ? new Date() : null,
+    },
+    update: {
+      broadcastsPaused: paused,
+      pausedReason: paused ? (reason ?? null) : null,
+      pausedAt: paused ? new Date() : null,
+    },
+  })
+
+  if (paused) {
+    logger.error({
+      event: 'whatsapp_quality_degraded',
+      reason: reason ?? 'unknown',
+      action: 'broadcasts_paused_globally',
+    })
+  } else {
+    logger.info({
+      event: 'whatsapp_quality_recovered',
+      action: 'broadcasts_unpaused_globally',
+    })
+  }
+}
+
+/**
+ * Check if a phone is in the platform-wide opt-out registry.
+ * Cross-tenant, no RLS — a STOP from any tenant blocks all broadcasts to that phone.
+ */
+export async function isPhonePlatformOptedOut(phone: string): Promise<boolean> {
+  const normalized = normalizePhone(phone)
+  try {
+    const row = await db.platformMarketingOptOut.findUnique({ where: { phone: normalized } })
+    return row !== null
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Add a phone to the platform-wide opt-out registry.
+ * Idempotent — no error if already present.
+ */
+export async function platformOptOut(phone: string): Promise<void> {
+  const normalized = normalizePhone(phone)
+  try {
+    await db.platformMarketingOptOut.upsert({
+      where: { phone: normalized },
+      create: { phone: normalized },
+      update: { optedOutAt: new Date() },
+    })
+    logger.info({ event: 'platform_marketing_opt_out', phone: normalized.slice(0, 6) + '****' })
+  } catch (err) {
+    logger.error({ event: 'platform_opt_out_failed', phone: normalized.slice(0, 6) + '****', err })
+  }
+}
+
+/**
+ * Remove a phone from the platform-wide opt-out registry (re-subscribe).
+ */
+export async function platformOptIn(phone: string): Promise<void> {
+  const normalized = normalizePhone(phone)
+  try {
+    await db.platformMarketingOptOut.deleteMany({ where: { phone: normalized } })
+    logger.info({ event: 'platform_marketing_opt_in', phone: normalized.slice(0, 6) + '****' })
+  } catch (err) {
+    logger.error({ event: 'platform_opt_in_failed', phone: normalized.slice(0, 6) + '****', err })
+  }
+}
+
+/**
+ * Filter out platform-wide opted-out phones from a recipient list.
+ */
+async function filterPlatformOptedOutPhones(phones: string[]): Promise<string[]> {
+  const result: string[] = []
+  for (const phone of phones) {
+    if (!(await isPhonePlatformOptedOut(phone))) {
+      result.push(phone)
+    }
+  }
+  return result
+}
+
+// ── Public API ───────────────────────────────────────────────────────────────
+
 export async function setMarketingOptIn(
   tenantId: string,
   phone: string,
   optedIn: boolean
 ): Promise<void> {
+  const normalized = normalizePhone(phone)
+
   await withTenant(tenantId, (tx) =>
-    optedIn ? optInMarketing(tx, tenantId, phone) : optOutMarketing(tx, tenantId, phone)
+    optedIn ? optInMarketing(tx, tenantId, normalized) : optOutMarketing(tx, tenantId, normalized)
   )
+
+  // Also sync the platform-wide opt-out registry
+  if (optedIn) {
+    await platformOptIn(normalized)
+  } else {
+    await platformOptOut(normalized)
+  }
+
   logger.info({
     event: optedIn ? 'marketing_opt_in' : 'marketing_opt_out',
-    phone: phone.slice(0, 6) + '****',
+    phone: normalized.slice(0, 6) + '****',
   })
 }
 
@@ -46,31 +174,95 @@ export async function previewBroadcast(
   prompt: string,
   businessName: string
 ): Promise<{ message: string; recipientCount: number }> {
-  // The Anthropic call runs concurrently with a SHORT tenant tx (no LLM call is
-  // ever held open inside a DB transaction).
   const [message, phones] = await Promise.all([
     generateMarketingMessage(prompt, businessName),
     withTenant(tenantId, (tx) => findOptedInPhones(tx, tenantId)),
   ])
-  return { message, recipientCount: phones.length }
+  // Filter platform-wide opt-outs for accurate preview count
+  const filteredPhones = await filterPlatformOptedOutPhones(phones)
+  return { message, recipientCount: filteredPhones.length }
 }
 
+/**
+ * Send a template-based marketing broadcast.
+ *
+ * Gating rules (WP-14):
+ *  (a) templateName required — free-text broadcasts are rejected (BROADCAST_TEMPLATE_REQUIRED).
+ *  (b) Per-tenant daily cap via BROADCAST_DAILY_CAP env (default 1); cap hit → BROADCAST_RATE_LIMITED.
+ *  (c) Platform-wide opt-out: phones in platform_marketing_opt_outs are filtered from every send list.
+ *  (d) Global broadcast-pause flag: if set by quality monitor, all sends blocked → BROADCASTS_GLOBALLY_PAUSED.
+ *
+ * Every rejection is logged with tenantId + reason — never silently dropped.
+ */
 export async function sendBroadcast(
   tenantId: string,
   message: string,
-  createdBy: string | null
+  createdBy: string | null,
+  templateName?: string
 ): Promise<{ broadcastId: string; sentTo: number; delivered: number }> {
-  const { broadcast, phones } = await withTenant(tenantId, async (tx) => {
+  // ── Gate 0: template required ───────────────────────────────────────────
+  if (!templateName) {
+    logger.warn({
+      event: 'broadcast_rejected_template_required',
+      tenantId,
+      reason: 'free-text broadcast blocked — templateName required per shared-number gating',
+    })
+    throw new AppError(
+      ErrorCodes.BROADCAST_TEMPLATE_REQUIRED,
+      'Template-based broadcasts only. Free-text broadcasts are not allowed on the shared WhatsApp number.',
+      400
+    )
+  }
+
+  // ── Gate 1: global pause flag (platform-level, outside tenant tx) ───────
+  if (await isBroadcastsGloballyPaused()) {
+    logger.warn({
+      event: 'broadcast_rejected_globally_paused',
+      tenantId,
+      reason: 'broadcasts paused globally due to quality degradation',
+    })
+    throw new AppError(
+      ErrorCodes.BROADCASTS_GLOBALLY_PAUSED,
+      'Broadcasts are temporarily paused. Please try again later.',
+      503
+    )
+  }
+
+  // ── Get opted-in phones (short tenant tx) ────────────────────────────────
+  const rawPhones = await withTenant(tenantId, (tx) => findOptedInPhones(tx, tenantId))
+
+  // ── Filter platform-wide opt-outs (cross-tenant, outside any tenant tx) ─
+  const phones = await filterPlatformOptedOutPhones(rawPhones)
+
+  // ── Gate 2+3 within tenant tx: daily cap + create broadcast ─────────────
+  const broadcast = await withTenant(tenantId, async (tx) => {
     const todayCount = await countTodayBroadcasts(tx, tenantId)
-    if (todayCount >= 1) {
-      throw new AppError(ErrorCodes.BROADCAST_RATE_LIMITED, 'You have already sent a broadcast today. Try again tomorrow.', 429)
+    const cap = broadcastDailyCap()
+    if (todayCount >= cap) {
+      logger.warn({
+        event: 'broadcast_rejected_daily_cap',
+        tenantId,
+        todayCount,
+        cap,
+        reason: 'per-tenant daily broadcast cap reached',
+      })
+      throw new AppError(
+        ErrorCodes.BROADCAST_RATE_LIMITED,
+        `You have reached your daily broadcast limit (${cap} per day). Try again tomorrow.`,
+        429
+      )
     }
-    const recipients = await findOptedInPhones(tx, tenantId)
-    if (recipients.length === 0) {
+
+    if (phones.length === 0) {
+      logger.warn({
+        event: 'broadcast_rejected_no_recipients',
+        tenantId,
+        reason: 'no opted-in customers after filtering platform opt-outs',
+      })
       throw new AppError(ErrorCodes.VALIDATION_ERROR, 'No opted-in customers to send to.', 400)
     }
-    const created = await createBroadcast(tx, { tenantId, message, sentTo: recipients.length, createdBy })
-    return { broadcast: created, phones: recipients }
+
+    return createBroadcast(tx, { tenantId, message, sentTo: phones.length, createdBy })
   })
 
   logger.info({ event: 'broadcast_started', tenantId, broadcastId: broadcast.id, sentTo: phones.length })
@@ -86,6 +278,8 @@ export async function sendBroadcast(
 export async function listBroadcasts(tenantId: string): Promise<Broadcast[]> {
   return withTenant(tenantId, (tx) => findBroadcasts(tx, tenantId))
 }
+
+// ── Internal helpers ─────────────────────────────────────────────────────────
 
 async function generateMarketingMessage(prompt: string, businessName: string): Promise<string> {
   if (!process.env['ANTHROPIC_API_KEY'] || !process.env['NLP_MODEL']) {

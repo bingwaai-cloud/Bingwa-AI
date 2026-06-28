@@ -113,6 +113,9 @@ beforeEach(async () => {
   mockedSend.mockResolvedValue(undefined)
   // Clear any leftover subscriptions
   await db.subscription.deleteMany({ where: { tenantId: { in: [TENANT_A_ID, TENANT_B_ID] } } })
+  // Sanitize ALL payment_transactions via adminDb — guards against cross-suite
+  // pollution from cumulative $disconnect cycles (WP-14 regression fix).
+  await getAdminDb().paymentTransaction.deleteMany({})
 })
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

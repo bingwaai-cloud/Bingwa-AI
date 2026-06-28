@@ -295,6 +295,25 @@ model MarketingBroadcast {
   @@map("marketing_broadcasts")
 }
 
+model PlatformSetting {
+  id                Int        @id @default(1)
+  broadcastsPaused  Boolean    @default(false) @map("broadcasts_paused")
+  pausedReason      String?    @map("paused_reason")
+  pausedAt          DateTime?  @map("paused_at") @db.Timestamptz()
+  createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt         DateTime   @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@map("platform_settings")
+}
+
+model PlatformMarketingOptOut {
+  phone      String    @id @db.VarChar(20)
+  optedOutAt DateTime  @default(now()) @map("opted_out_at") @db.Timestamptz()
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@map("platform_marketing_opt_outs")
+}
+
 model AuditLog {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId     String   @map("tenant_id") @db.Uuid

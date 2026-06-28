@@ -16,6 +16,8 @@ import {
   initiateAutoRenewal,
 } from '../payments/paymentService.js'
 import { selectedProviderName } from '../payments/providerRegistry.js'
+import { getQualityProvider } from '../channels/whatsapp/whatsappQualityProvider.js'
+import { setBroadcastsPaused } from '../services/marketingService.js'
 
 const TIMEZONE = 'Africa/Kampala'
 
@@ -124,6 +126,50 @@ async function runAutoRenewals(): Promise<void> {
 }
 
 /**
+ * WhatsApp quality monitor (WP-14).
+ * Polls the provider's quality/messaging-tier endpoint hourly.
+ * On confirmed < HIGH: auto-pause ALL tenant broadcasts globally.
+ * On recovery to HIGH: clear the flag (auto-recover).
+ *
+ * Default-safe: the stub and any error return HIGH — never pause on missing data.
+ */
+export async function runQualityMonitor(): Promise<void> {
+  const provider = getQualityProvider()
+  let tier: string
+
+  try {
+    tier = await provider.getQualityTier()
+  } catch (err) {
+    logger.warn({
+      event: 'whatsapp_quality_check_error',
+      provider: provider.name,
+      error: err instanceof Error ? err.message : String(err),
+      reason: 'defaulting to HIGH — will not pause broadcasts',
+    })
+    tier = 'HIGH'
+  }
+
+  logger.debug({ event: 'whatsapp_quality_check', provider: provider.name, tier })
+
+  // Only act on confirmed non-HIGH ratings (MEDIUM or LOW).
+  // UNKNOWN and HIGH are treated as safe.
+  if (tier === 'MEDIUM' || tier === 'LOW') {
+    await setBroadcastsPaused(true, `whatsapp_quality_${tier.toLowerCase()}`)
+  } else if (tier === 'HIGH') {
+    // Attempt to clear the pause if currently paused (auto-recover).
+    try {
+      const row = await db.platformSetting.findFirst({ where: { id: 1 } })
+      if (row?.broadcastsPaused) {
+        await setBroadcastsPaused(false)
+      }
+    } catch {
+      // If the table doesn't exist, nothing to clear.
+    }
+  }
+  // UNKNOWN: do nothing (safe).
+}
+
+/**
  * Register all cron jobs and start the scheduler.
  * Call once at server startup.
  */
@@ -207,6 +253,20 @@ export function startScheduler(): void {
     { timezone: TIMEZONE }
   )
 
+  // ── WhatsApp quality monitor: every hour at :30 ─────────────────────────────
+  // Polls the provider's quality/messaging-tier endpoint. On confirmed < HIGH:
+  // logger.error 'whatsapp_quality_degraded' + auto-pause ALL tenant broadcasts
+  // (global flag). On recovery to HIGH: clear the flag (auto-recover).
+  cron.schedule(
+    '30 * * * *',
+    () => {
+      void runQualityMonitor().catch((err) => {
+        logger.error({ event: 'quality_monitor_job_failed', err })
+      })
+    },
+    { timezone: TIMEZONE }
+  )
+
   logger.info({
     event: 'scheduler_started',
     timezone: TIMEZONE,
@@ -218,6 +278,7 @@ export function startScheduler(): void {
       'auto_renewal      @ 09:05 EAT daily',
       'payment_timeout   @ every 15 min',
       'reconciliation    @ 02:00 EAT daily',
+      'quality_monitor   @ :30 every hour',
     ],
   })
 }

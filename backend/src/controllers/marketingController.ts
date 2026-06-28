@@ -16,7 +16,8 @@ const PreviewSchema = z.object({
 })
 
 const BroadcastSchema = z.object({
-  message: z.string().min(5).max(280),
+  message:      z.string().min(5).max(280),
+  templateName: z.string().min(1).max(255).optional(),
 })
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
@@ -67,7 +68,7 @@ export const handleSendBroadcast = asyncHandler(async (req: Request, res: Respon
 
   const createdBy = req.user?.userId ?? null
 
-  const result = await sendBroadcast(tenantId, parsed.data.message, createdBy)
+  const result = await sendBroadcast(tenantId, parsed.data.message, createdBy, parsed.data.templateName)
 
   // legacy header removal: after 2026-08-15
   const source = req.headers['x-gezi-source'] ?? req.headers['x-bingwa-source']

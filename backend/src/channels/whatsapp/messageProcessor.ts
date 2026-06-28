@@ -84,8 +84,9 @@ export async function processWebhookPayload(body: MetaWebhookBody): Promise<void
           // Mark as read immediately so sender sees double-tick
           void markMessageRead(message.id)
 
-          // Handle STOP keyword: opt customer out of marketing broadcasts
-          if (message.text.body.trim().toUpperCase() === 'STOP') {
+          // Handle STOP / UNSUBSCRIBE keyword: opt customer out of marketing broadcasts
+          const trimmedUpper = message.text.body.trim().toUpperCase()
+          if (trimmedUpper === 'STOP' || trimmedUpper === 'UNSUBSCRIBE') {
             setImmediate(() => {
               void handleStopRequest(message.from).catch((err) => {
                 logger.error({ event: 'stop_handling_error', messageId: message.id, err })

@@ -88,6 +88,7 @@ module.exports = async function globalSetup() {
     '014_payment_status_check.sql',
     '015_subscription_grace.sql',
     '016_tenant_users.sql',
+    '017_platform_settings.sql',
   ]
 
   const client = new Client({ connectionString: ownerUrl })
