@@ -40,6 +40,7 @@ jest.unstable_mockModule('axios', () => {
 jest.unstable_mockModule('../../src/channels/whatsapp/whatsappClient.js', () => ({
   sendTextMessage: jest.fn().mockImplementation(() => Promise.resolve()),
   markMessageRead: jest.fn().mockImplementation(() => Promise.resolve()),
+  getWhatsAppProvider: jest.fn(() => 'meta'),
 }))
 
 // ── Dynamic imports (after mock registration, so mocks take effect) ───────────

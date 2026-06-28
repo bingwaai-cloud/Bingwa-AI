@@ -15,7 +15,7 @@ import {
  *   1 membership  → that tenant (proceed)
  *   >1 memberships → the one with is_active_context = true
  *
- * This module lives in services/, NOT in src/whatsapp/ — channel adapters
+ * This module lives in services/, NOT in src/channels/whatsapp/ — channel adapters
  * call into it.
  */
 

@@ -13,6 +13,7 @@ jest.unstable_mockModule('../../../src/channels/whatsapp/echoBot.js', () => ({
 
 jest.unstable_mockModule('../../../src/channels/whatsapp/whatsappClient.js', () => ({
   markMessageRead: jest.fn(),
+  getWhatsAppProvider: jest.fn(() => 'meta'),
   sendTextMessage,
 }))
 
@@ -27,10 +28,12 @@ jest.unstable_mockModule('../../../src/services/draftsService.js', () => ({
 }))
 
 let processIncomingText: (from: string, text: string, messageId: string) => Promise<void>
+let processWebhookPayload: (body: { object: string; entry: unknown[] }) => Promise<void>
 
 beforeAll(async () => {
   const mod = await import('../../../src/channels/whatsapp/messageProcessor.js')
   processIncomingText = mod.processIncomingText
+  processWebhookPayload = mod.processWebhookPayload as typeof processWebhookPayload
 })
 
 const singleResolution = {
@@ -201,6 +204,47 @@ describe('WhatsApp draft-first message processing', () => {
     expect(sendTextMessage).toHaveBeenCalledWith(
       '+256700000401',
       '[Mama Sarah Shop] ↩️ Sugar has been undone. Stock restored.'
+    )
+  })
+  it('resolves a 360dialog-forwarded Cloud API inbound body by sender phone', async () => {
+    resolveTenant.mockResolvedValue(singleResolution)
+    resolvePendingDraftMessage.mockResolvedValue(null)
+
+    await processWebhookPayload({
+      object: 'whatsapp_business_account',
+      entry: [
+        {
+          id: 'waba-1',
+          changes: [
+            {
+              field: 'messages',
+              value: {
+                messaging_product: 'whatsapp',
+                metadata: { display_phone_number: '256700000000', phone_number_id: 'shared-number' },
+                messages: [
+                  {
+                    id: 'wamid.d360',
+                    from: '256700000401',
+                    type: 'text',
+                    timestamp: '1710000000',
+                    text: { body: 'stock check' },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    })
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    expect(resolveTenant).toHaveBeenCalledWith('+256700000401')
+    expect(handleIncomingMessage).toHaveBeenCalledWith(
+      '256700000401',
+      'stock check',
+      'wamid.d360',
+      singleResolution
     )
   })
 })

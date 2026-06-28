@@ -37,6 +37,7 @@ import type { ProviderTransaction } from '../../src/payments/PaymentProvider.js'
 jest.unstable_mockModule('../../src/channels/whatsapp/whatsappClient.js', () => ({
   sendTextMessage: jest.fn().mockImplementation(() => Promise.resolve()),
   markMessageRead: jest.fn().mockImplementation(() => Promise.resolve()),
+  getWhatsAppProvider: jest.fn(() => 'meta'),
 }))
 
 // Mock MoMo client (prevents real MTN network calls in whitelist test)

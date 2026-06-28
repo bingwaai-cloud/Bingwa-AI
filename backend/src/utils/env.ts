@@ -2,17 +2,14 @@
  * Validates environment variables at startup.
  *
  * Hard-required (always): DATABASE_URL, JWT_SECRET, JWT_REFRESH_SECRET.
- * Process exits immediately if any are missing — server cannot function without them.
+ * Process exits immediately if any are missing; server cannot function without them.
  *
- * Soft-required (production only): ANTHROPIC_API_KEY, WHATSAPP_*, API_URL.
- * These are warned about but do NOT stop the server. Missing values cause graceful
- * degradation (NLP falls back to "unknown", WhatsApp sends are no-ops). This means
- * /api/health still returns 200 even if third-party credentials aren't configured yet.
+ * Soft-required: ANTHROPIC_API_KEY, WhatsApp Meta defaults, API_URL.
+ * These warn but do not stop the server so health checks can still report status.
  *
- * Startup diagnostics are always printed so Railway logs show exactly what's set.
+ * Conditional-required: selected providers must be fully configured.
  */
 export function validateEnv(): void {
-  // ── Print startup diagnostic (never log values — only presence) ───────────
   const isRailway = Boolean(
     process.env['RAILWAY_PROJECT_ID'] ??
     process.env['RAILWAY_ENVIRONMENT_ID'] ??
@@ -23,8 +20,10 @@ export function validateEnv(): void {
     'NODE_ENV', 'PORT', 'DATABASE_URL',
     'JWT_SECRET', 'JWT_REFRESH_SECRET',
     'ANTHROPIC_API_KEY',
+    'WA_PROVIDER',
     'WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_APP_SECRET',
     'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_VERIFY_TOKEN',
+    'D360_API_KEY', 'D360_BASE_URL', 'D360_WEBHOOK_SECRET',
     'API_URL', 'WEB_ORIGINS', 'REPO_URL',
     'MTN_MOMO_SUBSCRIPTION_KEY',
     'PAYMENT_PROVIDER',
@@ -40,21 +39,24 @@ export function validateEnv(): void {
     console.log(`[startup] Absent vars:  ${absent.join(', ')}`)
   }
 
-  // ── Hard-required: server cannot run without these ─────────────────────────
   const critical = ['DATABASE_URL', 'JWT_SECRET', 'JWT_REFRESH_SECRET']
   const missingCritical = critical.filter((k) => !process.env[k])
 
   if (missingCritical.length > 0) {
-    console.error(`[startup] FATAL — missing critical env vars: ${missingCritical.join(', ')}`)
+    console.error(`[startup] FATAL - missing critical env vars: ${missingCritical.join(', ')}`)
     process.exit(1)
   }
 
-  // ── Soft-required: warn but allow server to start ─────────────────────────
-  // These degrade individual features but don't break the health endpoint.
+  const waProvider = process.env['WA_PROVIDER'] ?? 'meta'
+  if (waProvider !== 'meta' && waProvider !== '360dialog') {
+    console.error(`[startup] FATAL - WA_PROVIDER must be one of: meta, 360dialog`)
+    process.exit(1)
+  }
+
   const softRequired = [
-    'ANTHROPIC_API_KEY',       // NLP returns "unknown" if missing
-    'WHATSAPP_ACCESS_TOKEN',   // WhatsApp sends are no-ops if missing
-    'WHATSAPP_APP_SECRET',     // Webhook signature check skipped if missing
+    'ANTHROPIC_API_KEY',
+    'WHATSAPP_ACCESS_TOKEN',
+    'WHATSAPP_APP_SECRET',
     'WHATSAPP_PHONE_NUMBER_ID',
     'WHATSAPP_VERIFY_TOKEN',
     'API_URL',
@@ -62,20 +64,23 @@ export function validateEnv(): void {
 
   const missingSoft = softRequired.filter((k) => !process.env[k])
   if (missingSoft.length > 0) {
-    console.warn(`[startup] WARNING — missing optional vars (features degraded): ${missingSoft.join(', ')}`)
+    console.warn(`[startup] WARNING - missing optional vars (features degraded): ${missingSoft.join(', ')}`)
   }
 
-  // ── Conditional-required: the selected payment provider must be fully wired ──
-  // A misconfigured LIVE payment provider must NOT boot silently (WP-10). These
-  // are only enforced when that provider is actually selected, so dev/test runs
-  // on the legacy/default path are unaffected.
+  if (waProvider === '360dialog') {
+    const d360Required = ['D360_API_KEY', 'D360_WEBHOOK_SECRET']
+    const missingD360 = d360Required.filter((k) => !process.env[k])
+    if (missingD360.length > 0) {
+      console.error(`[startup] FATAL - WA_PROVIDER=360dialog but missing: ${missingD360.join(', ')}`)
+      process.exit(1)
+    }
+  }
+
   if ((process.env['PAYMENT_PROVIDER'] ?? 'legacy') === 'flutterwave') {
     const flwRequired = ['FLW_SECRET_KEY', 'FLW_PUBLIC_KEY', 'FLW_WEBHOOK_HASH', 'FLW_ENCRYPTION_KEY']
     const missingFlw = flwRequired.filter((k) => !process.env[k])
     if (missingFlw.length > 0) {
-      console.error(
-        `[startup] FATAL — PAYMENT_PROVIDER=flutterwave but missing: ${missingFlw.join(', ')}`
-      )
+      console.error(`[startup] FATAL - PAYMENT_PROVIDER=flutterwave but missing: ${missingFlw.join(', ')}`)
       process.exit(1)
     }
   }

@@ -7,6 +7,7 @@ const parseIntent = jest.fn<() => Promise<ParsedIntent>>()
 jest.unstable_mockModule('../../src/channels/whatsapp/whatsappClient.js', () => ({
   sendTextMessage,
   markMessageRead: jest.fn(),
+  getWhatsAppProvider: jest.fn(() => 'meta'),
 }))
 
 jest.unstable_mockModule('../../src/nlp/intentParser.js', () => ({
