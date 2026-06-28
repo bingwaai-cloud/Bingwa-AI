@@ -89,6 +89,7 @@ module.exports = async function globalSetup() {
     '015_subscription_grace.sql',
     '016_tenant_users.sql',
     '017_platform_settings.sql',
+    '018_branch_id.sql',
   ]
 
   const client = new Client({ connectionString: ownerUrl })

@@ -234,6 +234,7 @@ model Customer {
 model Expense {
   id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId    String    @map("tenant_id") @db.Uuid
+  branchId    String?   @map("branch_id") @db.Uuid
   name        String    @db.VarChar(255)
   amountUgx   Int       @map("amount_ugx")
   frequency   String    @default("monthly") @db.VarChar(20)
@@ -245,6 +246,7 @@ model Expense {
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
 
   @@index([tenantId, createdAt])
+  @@index([tenantId, branchId])
   @@map("expenses")
 }
 
