@@ -95,4 +95,16 @@ describe('WhatsApp webhook route provider authentication', () => {
 
     expect(processWebhookPayload).not.toHaveBeenCalled()
   })
+  it('rejects missing 360dialog Basic auth before JSON parsing', async () => {
+    process.env['WA_PROVIDER'] = '360dialog'
+    process.env['D360_WEBHOOK_SECRET'] = 'hook-user:hook-password'
+
+    await request(app)
+      .post('/api/webhook')
+      .set('Content-Type', 'application/json')
+      .send('{not valid json')
+      .expect(403)
+
+    expect(processWebhookPayload).not.toHaveBeenCalled()
+  })
 })

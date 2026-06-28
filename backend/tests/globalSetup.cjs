@@ -36,6 +36,7 @@
  */
 const path = require('path')
 const fs = require('fs')
+const { execFileSync } = require('child_process')
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') })
 
 module.exports = async function globalSetup() {
@@ -49,6 +50,24 @@ module.exports = async function globalSetup() {
     ;({ Client } = require('pg'))
   } catch {
     throw new Error("Test setup needs the 'pg' package. Run: npm install")
+  }
+
+  const repoRoot = path.resolve(__dirname, '..')
+  try {
+    execFileSync(
+      process.execPath,
+      [path.join(repoRoot, 'node_modules/prisma/build/index.js'), 'migrate', 'deploy', '--schema=db/schema.prisma'],
+      {
+        cwd: repoRoot,
+        env: { ...process.env, DATABASE_URL: ownerUrl },
+        stdio: 'pipe',
+      }
+    )
+  } catch (err) {
+    const output = err && typeof err === 'object' && 'stdout' in err
+      ? String(err.stdout ?? '') + String(err.stderr ?? '')
+      : String(err)
+    throw new Error(`Prisma baseline migration failed: ${output}`)
   }
 
   const migDir = path.resolve(__dirname, '../db/migrations')

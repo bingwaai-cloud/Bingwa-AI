@@ -71,9 +71,19 @@ webhookRouter.post(
       return
     }
 
+    let body: MetaWebhookBody
+    try {
+      body = Buffer.isBuffer(req.body)
+        ? JSON.parse(rawBody.toString('utf8')) as MetaWebhookBody
+        : req.body as MetaWebhookBody
+    } catch {
+      logger.warn({ event: 'webhook_invalid_json', provider })
+      res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Invalid request body.' } })
+      return
+    }
+
     res.status(200).json({ success: true })
 
-    const body = req.body as MetaWebhookBody
     processWebhookPayload(body).catch((err) => {
       logger.error({ event: 'webhook_processing_error', err })
     })

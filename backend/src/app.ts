@@ -5,6 +5,8 @@ import rateLimit from 'express-rate-limit'
 import { apiRouter } from './routes/index.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { logger } from './utils/logger.js'
+import { getWhatsAppProvider } from './channels/whatsapp/whatsappClient.js'
+import { verifyD360BasicAuth } from './channels/whatsapp/verifySignature.js'
 
 export function createApp(): express.Express {
   const app = express()
@@ -48,8 +50,33 @@ export function createApp(): express.Express {
   )
 
   // ─── Body parsing ─────────────────────────────────────────────────────────
-  // Stash the raw Buffer on req.rawBody before JSON parsing so the WhatsApp
-  // webhook handler can verify Meta's HMAC-SHA256 signature.
+  // 360dialog webhook auth is header-only, so reject bad credentials before any
+  // body parser reads the request. Meta still needs the raw bytes for HMAC.
+  app.use('/api/webhook', (req, res, next) => {
+    if (req.method === 'POST' && getWhatsAppProvider() === '360dialog') {
+      const authorization = req.headers['authorization']
+      if (!verifyD360BasicAuth(Array.isArray(authorization) ? authorization[0] : authorization)) {
+        res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Webhook authentication failed.' } })
+        return
+      }
+    }
+    next()
+  })
+
+  // Stash the raw Buffer on req.rawBody before JSON parsing so webhook handlers
+  // can verify provider authentication before parsing Cloud API JSON payloads.
+  app.use(
+    '/api/webhook',
+    express.raw({
+      type: 'application/json',
+      limit: '1mb',
+      verify: (req: express.Request & { rawBody?: Buffer }, _res, buf) => {
+        req.rawBody = buf
+      },
+    })
+  )
+
+  // Stash raw bodies for non-WhatsApp JSON routes that verify webhook secrets.
   app.use(
     express.json({
       limit: '1mb',
