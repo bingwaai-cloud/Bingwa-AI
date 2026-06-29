@@ -117,6 +117,7 @@ model Item {
 model Sale {
   id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId    String    @map("tenant_id") @db.Uuid
+  branchId    String?   @map("branch_id") @db.Uuid
   itemId      String?   @map("item_id") @db.Uuid
   itemName    String    @map("item_name") @db.VarChar(255)
   qty         Int
@@ -131,6 +132,7 @@ model Sale {
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz()
 
   @@index([tenantId, createdAt])
+  @@index([tenantId, branchId])
   @@index([itemId])
   @@index([customerId])
   @@map("sales")
@@ -159,6 +161,7 @@ model SaleLineItem {
 model Purchase {
   id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId     String    @map("tenant_id") @db.Uuid
+  branchId     String?   @map("branch_id") @db.Uuid
   itemId       String?   @map("item_id") @db.Uuid
   itemName     String    @map("item_name") @db.VarChar(255)
   qty          Int
@@ -174,6 +177,7 @@ model Purchase {
   deletedAt    DateTime? @map("deleted_at") @db.Timestamptz()
 
   @@index([tenantId, createdAt])
+  @@index([tenantId, branchId])
   @@index([itemId])
   @@index([supplierId])
   @@map("purchases")
