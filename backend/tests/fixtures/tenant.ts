@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken'
-import { db, withTenant } from '../../src/db.js'
+import { db, getAdminDb, withTenant } from '../../src/db.js'
 
 /**
  * Shared test fixtures for row-level tenancy (P0-1).
@@ -114,6 +114,7 @@ export async function cleanupTenant(tenantId: string): Promise<void> {
     await tx.itemAlias.deleteMany({})
     await tx.item.deleteMany({})
   })
+  await getAdminDb().$executeRaw`TRUNCATE TABLE public.audit_log`
   // Global tables with FK to tenants (not RLS-scoped).
   await db.tenantUser.deleteMany({ where: { tenantId } }).catch(() => undefined)
   await db.paymentTransaction.deleteMany({ where: { tenantId } }).catch(() => undefined)

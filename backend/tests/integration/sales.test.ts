@@ -6,6 +6,7 @@ import type { Express } from 'express'
 import { createApp } from '../../src/app.js'
 import { db, withTenant } from '../../src/db.js'
 import { createTestTenant, makeToken, seedItem, cleanupTenant, type TestTenant } from '../fixtures/tenant.js'
+import { truncateAuditLog } from '../fixtures/audit.js'
 
 const TEST_TENANT_ID = 'a1b2c3d4-0000-0000-0000-000000000001'
 const TEST_ITEM_ID = 'a1b2c3d4-0000-0000-0000-000000000003'
@@ -47,6 +48,7 @@ describe('Sales API', () => {
 
   beforeAll(async () => {
     app = createApp()
+    await truncateAuditLog()
     await cleanupTenant(TEST_TENANT_ID)
     tenant = await createTestTenant({ id: TEST_TENANT_ID, ownerPhone: '+256700000099' })
     token = makeToken(tenant)
@@ -77,11 +79,13 @@ describe('Sales API', () => {
   })
 
   afterAll(async () => {
+    await truncateAuditLog()
     await cleanupTenant(TEST_TENANT_ID)
     await db.$disconnect()
   })
 
   beforeEach(async () => {
+    await truncateAuditLog()
     await resetItemStock()
   })
 

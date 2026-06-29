@@ -29,6 +29,7 @@ import {
   seedItem,
   type TestTenant,
 } from '../fixtures/tenant.js'
+import { truncateAuditLog } from '../fixtures/audit.js'
 import type { ProviderTransaction } from '../../src/payments/PaymentProvider.js'
 
 // ── Mock external I/O (register BEFORE dynamic imports) ───────────────────────
@@ -101,7 +102,7 @@ afterAll(async () => {
   const adminDb = getAdminDb()
   await adminDb.paymentTransaction.deleteMany({ where: { tenantId: { in: [TENANT_A_ID, TENANT_B_ID] } } })
   await adminDb.subscription.deleteMany({ where: { tenantId: { in: [TENANT_A_ID, TENANT_B_ID] } } })
-  await adminDb.auditLog.deleteMany({ where: { tenantId: { in: [TENANT_A_ID, TENANT_B_ID] } } })
+  await truncateAuditLog()
   await cleanupTenant(TENANT_A_ID)
   await cleanupTenant(TENANT_B_ID)
   await db.$disconnect()
@@ -111,6 +112,7 @@ beforeEach(async () => {
   jest.clearAllMocks()
   mockGetTransaction.mockReset()
   mockedSend.mockResolvedValue(undefined)
+  await truncateAuditLog()
   // Clear any leftover subscriptions
   await db.subscription.deleteMany({ where: { tenantId: { in: [TENANT_A_ID, TENANT_B_ID] } } })
   // Sanitize ALL payment_transactions via adminDb — guards against cross-suite
@@ -210,7 +212,7 @@ describe('Reconciliation — mismatch detection', () => {
 
     // Clean up
     await db.paymentTransaction.delete({ where: { id: tx.id } })
-    await adminDb.auditLog.deleteMany({ where: { tenantId: TENANT_A_ID } })
+    await truncateAuditLog()
   })
 
   it('detects amount mismatch and marks row needs_review', async () => {
@@ -238,8 +240,7 @@ describe('Reconciliation — mismatch detection', () => {
 
     // Clean up
     await db.paymentTransaction.delete({ where: { id: tx.id } })
-    const adminDbClean = getAdminDb()
-    await adminDbClean.auditLog.deleteMany({ where: { tenantId: TENANT_A_ID } })
+    await truncateAuditLog()
   })
 
   it('skips already-parked rows (idempotency)', async () => {
@@ -303,8 +304,7 @@ describe('Reconciliation — mismatch detection', () => {
 
     // Clean up
     await db.paymentTransaction.delete({ where: { id: tx.id } })
-    const adminDbClean = getAdminDb()
-    await adminDbClean.auditLog.deleteMany({ where: { tenantId: TENANT_A_ID } })
+    await truncateAuditLog()
   })
 })
 
@@ -352,7 +352,7 @@ describe('Reconciliation — cross-tenant isolation', () => {
     // Clean up: use adminDb since RLS would block cross-tenant delete
     const adminDb = getAdminDb()
     await adminDb.paymentTransaction.deleteMany({ where: { id: { in: [txA.id, txB.id] } } })
-    await adminDb.auditLog.deleteMany({ where: { tenantId: { in: [TENANT_A_ID, TENANT_B_ID] } } })
+    await truncateAuditLog()
   })
 })
 
