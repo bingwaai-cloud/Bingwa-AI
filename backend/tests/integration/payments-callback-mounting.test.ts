@@ -9,6 +9,7 @@ import type { Express } from 'express'
 import request from 'supertest'
 
 let app: Express
+const ORIGINAL_PROVIDER = process.env['PAYMENT_PROVIDER']
 
 beforeAll(async () => {
   jest.resetModules()
@@ -20,6 +21,8 @@ beforeAll(async () => {
 afterAll(async () => {
   const { db } = await import('../../src/db.js')
   await db.$disconnect()
+  if (ORIGINAL_PROVIDER === undefined) delete process.env['PAYMENT_PROVIDER']
+  else process.env['PAYMENT_PROVIDER'] = ORIGINAL_PROVIDER
 })
 
 describe('WP-17 C-1 — legacy callbacks are 404 under the Flutterwave cutover', () => {
