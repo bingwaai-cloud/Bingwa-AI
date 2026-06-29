@@ -47,6 +47,26 @@ export function validateEnv(): void {
     process.exit(1)
   }
 
+  // WP-17 L-1: in production, reject weak or placeholder JWT secrets. A 256-bit
+  // secret is ~32+ characters; the .env.example placeholders must never reach
+  // production. Presence alone (above) is not enough for a financial system.
+  if (process.env['NODE_ENV'] === 'production') {
+    const JWT_PLACEHOLDERS = new Set([
+      'change-this-to-a-long-random-string',
+      'change-this-too',
+    ])
+    const weakJwt = (['JWT_SECRET', 'JWT_REFRESH_SECRET'] as const).filter((k) => {
+      const v = process.env[k] ?? ''
+      return v.length < 32 || JWT_PLACEHOLDERS.has(v)
+    })
+    if (weakJwt.length > 0) {
+      console.error(
+        `[startup] FATAL - weak JWT secret(s) in production (need >=32 random chars, not a placeholder): ${weakJwt.join(', ')}`
+      )
+      process.exit(1)
+    }
+  }
+
   const waProvider = process.env['WA_PROVIDER'] ?? 'meta'
   if (waProvider !== 'meta' && waProvider !== '360dialog') {
     console.error(`[startup] FATAL - WA_PROVIDER must be one of: meta, 360dialog`)

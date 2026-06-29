@@ -15,7 +15,9 @@ function safeEqualString(expected: string, received: string): boolean {
 export function verifyMetaSignature(rawBody: Buffer, signature: string): boolean {
   const secret = process.env['WHATSAPP_APP_SECRET']
   if (!secret) {
-    if (process.env['NODE_ENV'] !== 'production') return true
+    // WP-17 L-2: the Meta provider REQUIRES the app secret to authenticate the
+    // webhook. Fail CLOSED whenever it is missing — no NODE_ENV bypass. A
+    // misconfigured environment must reject Meta webhooks, never accept them.
     return false
   }
 

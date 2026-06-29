@@ -228,7 +228,7 @@ export interface CallbackPayload {
  * sendTextMessage is fire-and-forget, outside the transaction.
  */
 export async function handleMomoCallback(payload: CallbackPayload): Promise<void> {
-  const { referenceId, status, financialTransactionId, amount } = payload
+  const { referenceId, financialTransactionId } = payload
 
   const transaction = await findPaymentByProviderRef(referenceId)
 
@@ -254,15 +254,29 @@ export async function handleMomoCallback(payload: CallbackPayload): Promise<void
     return
   }
 
-  if (status === 'SUCCESSFUL') {
-    // Anti-fraud: verify the amount MTN reports matches what we initiated
-    if (amount !== undefined) {
-      const reportedAmount = parseInt(amount, 10)
-      if (
-        process.env['MTN_MOMO_ENVIRONMENT'] === 'production' &&
-        !isNaN(reportedAmount) &&
-        reportedAmount !== transaction.amountUgx
-      ) {
+  // WP-17 C-1 (security.md §8): NEVER trust the callback body's status/amount.
+  // The public /api/payments/callback endpoint is unauthenticated, so a forged
+  // `{referenceId, status:'SUCCESSFUL'}` must NOT be able to activate a plan.
+  // Re-query MTN and act ONLY on the authoritative status + amount — MTN is the
+  // source of truth. If the re-query fails, leave the row pending for the
+  // timeout sweep; do not settle on unverified data.
+  let authoritative: Awaited<ReturnType<typeof getCollectionStatus>>
+  try {
+    authoritative = await getCollectionStatus(transaction.providerReference ?? referenceId)
+  } catch (err) {
+    logger.error({ event: 'momo_callback_requery_failed', referenceId, err })
+    return
+  }
+
+  if (authoritative.status === 'SUCCESSFUL') {
+    const planKey = planKeyFromType(transaction.type)
+
+    // Amount check ALWAYS runs (no environment gate — WP-17 C-1). The amount is
+    // taken from the re-query, never the callback body. A mismatch parks the row
+    // as needs_review and does NOT activate.
+    if (authoritative.amount !== undefined) {
+      const reportedAmount = parseInt(authoritative.amount, 10)
+      if (!isNaN(reportedAmount) && reportedAmount !== transaction.amountUgx) {
         logger.error({
           event:    'momo_callback_amount_mismatch',
           referenceId,
@@ -270,12 +284,11 @@ export async function handleMomoCallback(payload: CallbackPayload): Promise<void
           received: reportedAmount,
         })
 
-        // Status update + audit must commit together inside withTenant
         await withTenant(transaction.tenantId, async (tx) => {
-          await updatePaymentStatus(transaction.id, 'failed', tx)
+          await markPaymentNeedsReview(transaction.id, tx)
           await insertAuditLog(tx, {
             tenantId: transaction.tenantId,
-            action: 'payment.amount_mismatch',
+            action: 'payment.needs_review',
             entityType: 'payment',
             entityId: transaction.id,
             oldValue: { expected: transaction.amountUgx },
@@ -284,18 +297,15 @@ export async function handleMomoCallback(payload: CallbackPayload): Promise<void
           })
         })
 
-        // Fire-and-forget outside the tx
         await sendTextMessage(
           tenant.ownerPhone,
-          'Payment error: amount mismatch detected. Please contact support.'
+          'Payment received but the amount needs checking. Our team will confirm shortly — no action needed.'
         )
         return
       }
     }
 
     // Happy path: status + subscription + audit in one transaction
-    const planKey = transaction.type.replace('sub_', '').replace('renewal_', '') as PlanKey
-
     await withTenant(transaction.tenantId, async (tx) => {
       await updatePaymentStatus(transaction.id, 'successful', tx)
       await activateSubscription(
@@ -323,8 +333,10 @@ export async function handleMomoCallback(payload: CallbackPayload): Promise<void
       tenantId:              transaction.tenantId,
       financialTransactionId,
     })
-  } else {
-    // FAILED — status + audit in one transaction
+    return
+  }
+
+  if (authoritative.status === 'FAILED') {
     await withTenant(transaction.tenantId, async (tx) => {
       await updatePaymentStatus(transaction.id, 'failed', tx)
       await insertAuditLog(tx, {
@@ -332,23 +344,28 @@ export async function handleMomoCallback(payload: CallbackPayload): Promise<void
         action: 'payment.failed',
         entityType: 'payment',
         entityId: transaction.id,
-        newValue: { reason: payload.reason ?? null },
+        newValue: { reason: authoritative.reason ?? payload.reason ?? null },
         source: 'webhook',
       })
     })
 
     await sendTextMessage(
       tenant.ownerPhone,
-      `Payment failed. Reason: ${payload.reason ?? 'unknown'}. Reply PAY to try again.`
+      `Payment failed. Reason: ${authoritative.reason ?? payload.reason ?? 'unknown'}. Reply PAY to try again.`
     )
 
     logger.warn({
       event:       'payment_failed',
       referenceId,
       tenantId:    transaction.tenantId,
-      reason:      payload.reason,
+      reason:      authoritative.reason ?? payload.reason,
     })
+    return
   }
+
+  // MTN still reports PENDING — a forged or premature callback. Do not settle;
+  // the 10-minute timeout sweep will re-query and resolve it.
+  logger.info({ event: 'momo_callback_requery_still_pending', referenceId })
 }
 
 // ── Timeout check (called by scheduler) ──────────────────────────────────────
@@ -596,7 +613,7 @@ export interface AirtelCallbackPayload {
  * inside withTenant. sendTextMessage is fire-and-forget outside the tx.
  */
 export async function handleAirtelCallback(payload: AirtelCallbackPayload): Promise<void> {
-  const { id, status_code, airtel_money_id } = payload.transaction
+  const { id, airtel_money_id } = payload.transaction
 
   const transaction = await findPaymentByProviderRef(id)
 
@@ -620,8 +637,19 @@ export async function handleAirtelCallback(payload: AirtelCallbackPayload): Prom
     return
   }
 
-  if (status_code === 'TS') {
-    const planKey = transaction.type.replace('sub_', '').replace('renewal_', '') as PlanKey
+  // WP-17 H-1 (security.md §8): NEVER trust the callback body's status_code.
+  // Re-query Airtel and act ONLY on the authoritative status — a forged 'TS'
+  // cannot activate. If the re-query fails, leave pending for the timeout sweep.
+  let authoritative: Awaited<ReturnType<typeof getAirtelCollectionStatus>>
+  try {
+    authoritative = await getAirtelCollectionStatus(transaction.providerReference ?? id)
+  } catch (err) {
+    logger.error({ event: 'airtel_callback_requery_failed', transactionId: id, err })
+    return
+  }
+
+  if (authoritative.status === 'TS') {
+    const planKey = planKeyFromType(transaction.type)
     const planConfig = SUBSCRIPTION_PLANS[planKey]
 
     await withTenant(transaction.tenantId, async (tx) => {
@@ -649,9 +677,9 @@ export async function handleAirtelCallback(payload: AirtelCallbackPayload): Prom
       event:         'airtel_payment_successful',
       transactionId: id,
       tenantId:      transaction.tenantId,
-      airtelMoneyId: airtel_money_id,
+      airtelMoneyId: authoritative.airtelMoneyId ?? airtel_money_id,
     })
-  } else if (status_code === 'TF') {
+  } else if (authoritative.status === 'TF') {
     await withTenant(transaction.tenantId, async (tx) => {
       await updatePaymentStatus(transaction.id, 'failed', tx)
       await insertAuditLog(tx, {

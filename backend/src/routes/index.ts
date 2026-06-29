@@ -6,7 +6,7 @@ import { salesRouter } from './sales.js'
 import { inventoryRouter } from './inventory.js'
 import { purchasesRouter } from './purchases.js'
 import { suppliersRouter } from './suppliers.js'
-import { paymentsRouter, paymentCallbackRouter } from './payments.js'
+import { paymentsRouter, paymentCallbackRouter, flutterwaveCallbackRouter } from './payments.js'
 import { customersRouter } from './customers.js'
 import { marketingRouter } from './marketing.js'
 import { ordersRouter } from './orders.js'
@@ -37,13 +37,29 @@ apiRouter.use('/', healthRouter)
 apiRouter.use('/', webhookRouter)
 apiRouter.use('/v1/auth', authRouter)
 
-// Payment provider callbacks — public, no JWT
-// MTN MoMo:    POST /api/payments/callback
-// Airtel Money: POST /api/payments/airtel/callback
-apiRouter.use('/payments', paymentCallbackRouter)
+// Payment provider callbacks — public, no JWT.
+// Flutterwave (the cutover provider) is ALWAYS mounted:
+//   POST /api/payments/flutterwave/callback
+apiRouter.use('/payments', flutterwaveCallbackRouter)
+
+// WP-17 C-1/H-1: the LEGACY MTN/Airtel callbacks act on a provider-posted
+// callback and must NOT be reachable under the Flutterwave cutover. Mount them
+// ONLY when PAYMENT_PROVIDER=legacy; otherwise POST /api/payments/callback and
+// POST /api/payments/airtel/callback fall through to the 404 handler.
+//   MTN MoMo:     POST /api/payments/callback
+//   Airtel Money: POST /api/payments/airtel/callback
+if ((process.env['PAYMENT_PROVIDER'] ?? 'legacy') === 'legacy') {
+  apiRouter.use('/payments', paymentCallbackRouter)
+}
 
 // ─── Authenticated + tenant-scoped routes ────────────────────────────────────
 
+// TODO(WP-22 / WP-17 M-1): role enforcement is unwired — requireRole() exists in
+// middleware/auth.ts but no route uses it, so every authenticated principal has
+// full access. Apply requireRole('owner') to marketing/settings/delete routes and
+// requireRole('owner','manager') to reports BEFORE staff/web principals exist.
+// Latent today (signup mints only owner tokens). See
+// docs/prompts/wp-17-security-review-findings.md (M-1).
 apiRouter.use('/v1/sales',      authenticate, tenantMiddleware, graceMiddleware, salesRouter)
 apiRouter.use('/v1/inventory',  authenticate, tenantMiddleware, inventoryRouter)
 apiRouter.use('/v1/purchases',  authenticate, tenantMiddleware, graceMiddleware, purchasesRouter)
