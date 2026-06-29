@@ -21,6 +21,8 @@ import { db } from '../../src/db.js'
 import { createTestTenant, makeToken, cleanupTenant, type TestTenant } from '../fixtures/tenant.js'
 import type { Express } from 'express'
 
+process.env['PAYMENT_PROVIDER'] = 'legacy'
+
 // ── Mock external I/O ─────────────────────────────────────────────────────────
 // Must be registered BEFORE any dynamic import of a module that uses them.
 
@@ -52,6 +54,8 @@ const { _clearTokenCache } = await import('../../src/payments/momoClient.js')
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockedPost = (axiosModule.default as any).post as jest.MockedFunction<any>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockedGet = (axiosModule.default as any).get as jest.MockedFunction<any>
 const mockedSend = jest.mocked(whatsappModule.sendTextMessage)
 
 // ── Fixture constants ─────────────────────────────────────────────────────────
@@ -97,6 +101,7 @@ beforeEach(() => {
     // Default: requesttopay returns 202 Accepted
     return { data: {}, status: 202 }
   })
+  mockedGet.mockResolvedValue({ data: { status: 'PENDING' }, status: 200 })
 })
 
 // ── POST /api/v1/payments/initiate ────────────────────────────────────────────
@@ -314,6 +319,11 @@ describe('POST /api/payments/callback', () => {
   })
 
   it('activates subscription on SUCCESSFUL callback', async () => {
+    mockedGet.mockResolvedValueOnce({
+      data: { status: 'SUCCESSFUL', financialTransactionId: 'MTN-12345678', amount: '50000' },
+      status: 200,
+    })
+
     await request(app)
       .post('/api/payments/callback')
       .send({
@@ -344,6 +354,11 @@ describe('POST /api/payments/callback', () => {
   })
 
   it('marks transaction failed on FAILED callback and notifies user', async () => {
+    mockedGet.mockResolvedValueOnce({
+      data: { status: 'FAILED', reason: 'PAYER_NOT_FOUND' },
+      status: 200,
+    })
+
     await request(app)
       .post('/api/payments/callback')
       .send({
@@ -363,6 +378,11 @@ describe('POST /api/payments/callback', () => {
   })
 
   it('is idempotent — duplicate SUCCESSFUL callback does not double-activate', async () => {
+    mockedGet.mockResolvedValue({
+      data: { status: 'SUCCESSFUL', financialTransactionId: 'MTN-12345678', amount: '50000' },
+      status: 200,
+    })
+
     const payload = {
       referenceId: REF_ID,
       status:      'SUCCESSFUL',
@@ -410,6 +430,10 @@ describe('POST /api/payments/callback', () => {
   it('rejects amount mismatch in production environment', async () => {
     const originalEnv = process.env['MTN_MOMO_ENVIRONMENT']
     process.env['MTN_MOMO_ENVIRONMENT'] = 'production'
+    mockedGet.mockResolvedValueOnce({
+      data: { status: 'SUCCESSFUL', amount: '1000' },
+      status: 200,
+    })
 
     await request(app)
       .post('/api/payments/callback')
@@ -422,10 +446,10 @@ describe('POST /api/payments/callback', () => {
     await new Promise((resolve) => setTimeout(resolve, 200))
 
     const tx = await db.paymentTransaction.findUnique({ where: { id: REF_ID } })
-    expect(tx?.status).toBe('failed')
+    expect(tx?.status).toBe('needs_review')
 
-    // User notified of the error
-    expect(mockedSend).toHaveBeenCalledWith(TEST_PHONE, expect.stringContaining('error'))
+    // User notified that the verified provider amount needs review.
+    expect(mockedSend).toHaveBeenCalledWith(TEST_PHONE, expect.stringContaining('needs checking'))
 
     process.env['MTN_MOMO_ENVIRONMENT'] = originalEnv
   })
