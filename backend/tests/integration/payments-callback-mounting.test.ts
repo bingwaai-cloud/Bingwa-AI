@@ -4,6 +4,7 @@
  * a fresh import after setting the env.
  */
 
+import { jest } from '@jest/globals'
 import type { Express } from 'express'
 import request from 'supertest'
 

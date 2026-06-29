@@ -3,13 +3,16 @@
  * Runs with PAYMENT_PROVIDER=legacy so the legacy callbacks ARE mounted, and
  * proves the re-query defense: a forged "successful" callback no longer settles.
  *
- * Uses jest.mock + jest.Mocked to avoid ts-jest top-level-await limitation (TS1378).
+ * Uses jest.mock + jest.resetModules() to avoid ts-jest top-level-await (TS1378)
+ * and to ensure fresh mocks even when other tests have already loaded modules.
  */
+
+jest.resetModules()
 
 process.env['PAYMENT_PROVIDER'] = 'legacy'
 
-import type { Express } from 'express'
 import { jest } from '@jest/globals'
+import type { Express } from 'express'
 import request from 'supertest'
 
 jest.mock('../../src/payments/momoClient.js', () => ({
@@ -33,7 +36,7 @@ jest.mock('../../src/channels/whatsapp/whatsappClient.js', () => ({
 import { createApp } from '../../src/app.js'
 import { db } from '../../src/db.js'
 import { getCollectionStatus } from '../../src/payments/momoClient.js'
-import { createTestTenant, makeToken, cleanupTenant, type TestTenant } from '../fixtures/tenant.js'
+import { createTestTenant, makeToken, cleanupTenant } from '../fixtures/tenant.js'
 
 const mockGetStatus = getCollectionStatus as unknown as jest.Mock
 
@@ -41,12 +44,11 @@ const TEST_TENANT_ID = 'c0ffee17-0000-0000-0000-0000000000f1'
 const TEST_PHONE = '+256772170001'
 
 let app: Express
-let tenant: TestTenant
 
 beforeAll(async () => {
   app = createApp()
   await cleanupTenant(TEST_TENANT_ID)
-  tenant = await createTestTenant({ id: TEST_TENANT_ID, ownerPhone: TEST_PHONE, businessName: 'Forgery Test Shop' })
+  const tenant = await createTestTenant({ id: TEST_TENANT_ID, ownerPhone: TEST_PHONE, businessName: 'Forgery Test Shop' })
   makeToken(tenant)
 })
 
