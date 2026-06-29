@@ -16,11 +16,6 @@
     "lastSynced": "Last synced just now"
   },
   "routes": {
-    "today": {
-      "title": "Today",
-      "eyebrow": "Foundation placeholder",
-      "body": "The Today dashboard will show the business snapshot here after the API screens land."
-    },
     "sales": {
       "title": "Sales",
       "eyebrow": "Foundation placeholder",
@@ -45,6 +40,61 @@
       "title": "Settings",
       "eyebrow": "Foundation placeholder",
       "body": "Settings will hold account, session, backup, and business controls."
+    }
+  },
+  "today": {
+    "heroLabel": "Today's sales",
+    "saleCount_one": "{{count}} sale recorded today",
+    "saleCount_other": "{{count}} sales recorded today",
+    "emptySales": "No sales yet today \u2014 send 'sold 2 sugar 6k' to your Gezi number.",
+    "cashSection": "Cash movement",
+    "cashIn": "Cash in",
+    "cashOut": "Cash out",
+    "lowStockTitle": "Low-stock alerts",
+    "lowStockLine": "{{qty}} {{unit}} left, threshold {{threshold}}",
+    "noLowStock": "No low-stock alerts right now.",
+    "itemCount_one": "{{count}} item",
+    "itemCount_other": "{{count}} items",
+    "draftsTitle": "Open drafts from WhatsApp",
+    "draftCount_one": "{{count}} sale awaiting confirmation",
+    "draftCount_other": "{{count}} sales awaiting confirmation",
+    "noDrafts": "No WhatsApp drafts awaiting action.",
+    "sparklineTitle": "7-day sales",
+    "highestLabel": "Highest",
+    "offline": "Offline \u2014 showing last synced",
+    "errorTitle": "We couldn't load Today.",
+    "errorBody": "Your data is safe. Try again when the connection is steady.",
+    "retry": "Try again",
+    "provenance": "via {{source}} \u00b7 {{time}}",
+    "draftSheetTitle": "WhatsApp draft",
+    "closeSheet": "Close draft",
+    "draftSummary": "Draft summary",
+    "amendPayload": "Amend draft payload",
+    "immutableDraft": "This draft is no longer editable.",
+    "confirmDraft": "Confirm",
+    "amendDraft": "Amend",
+    "cancelDraft": "Cancel",
+    "draftActionError": "We couldn't update that draft. Your data is safe.",
+    "invalidPayload": "Draft payload must be a JSON object.",
+    "source": {
+      "whatsapp": "WhatsApp",
+      "web": "web",
+      "mobile": "mobile",
+      "api": "API",
+      "pos": "POS",
+      "inventory": "Inventory"
+    },
+    "state": {
+      "parsed": "Parsed",
+      "pending_clarification": "Needs answer",
+      "confirmed": "Confirmed",
+      "committed": "Committed",
+      "cancelled": "Cancelled"
+    },
+    "action": {
+      "sale": "Sale",
+      "purchase": "Purchase",
+      "expense": "Expense"
     }
   }
 }

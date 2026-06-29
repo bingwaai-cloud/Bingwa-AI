@@ -1,50 +1,63 @@
 {
   "nav": {
-    "today": "TODO",
-    "sales": "TODO",
-    "inventory": "TODO",
-    "customers": "TODO",
-    "reports": "TODO",
-    "settings": "TODO"
+    "today": "Leo",
+    "sales": "Mauzo",
+    "inventory": "Bidhaa dukani",
+    "customers": "Wateja",
+    "reports": "Ripoti",
+    "settings": "Mipangilio"
   },
   "shell": {
     "product": "Gezi AI",
-    "primaryNavigation": "TODO",
-    "recordSale": "TODO",
-    "secure": "TODO",
-    "session": "TODO",
-    "lastSynced": "TODO"
+    "primaryNavigation": "Urambazaji mkuu",
+    "recordSale": "Andika mauzo",
+    "secure": "Salama",
+    "session": "Kikao cha wavuti",
+    "lastSynced": "Imesawazishwa sasa hivi"
   },
   "routes": {
-    "today": {
-      "title": "TODO",
-      "eyebrow": "TODO",
-      "body": "TODO"
-    },
-    "sales": {
-      "title": "TODO",
-      "eyebrow": "TODO",
-      "body": "TODO"
-    },
-    "inventory": {
-      "title": "TODO",
-      "eyebrow": "TODO",
-      "body": "TODO"
-    },
-    "customers": {
-      "title": "TODO",
-      "eyebrow": "TODO",
-      "body": "TODO"
-    },
-    "reports": {
-      "title": "TODO",
-      "eyebrow": "TODO",
-      "body": "TODO"
-    },
-    "settings": {
-      "title": "TODO",
-      "eyebrow": "TODO",
-      "body": "TODO"
-    }
+    "sales": { "title": "Mauzo", "eyebrow": "Sehemu ya kusubiri", "body": "Rekodi za mauzo zitaonekana hapa kupitia mkataba wa /api/v1." },
+    "inventory": { "title": "Bidhaa dukani", "eyebrow": "Sehemu ya kusubiri", "body": "Bidhaa zitatumia chanzo kilekile cha WhatsApp, POS, na ripoti." },
+    "customers": { "title": "Wateja", "eyebrow": "Sehemu ya kusubiri", "body": "Rekodi za wateja zitabaki ndani ya biashara hii." },
+    "reports": { "title": "Ripoti", "eyebrow": "Sehemu ya kusubiri", "body": "Ripoti zitaonyesha hali ya biashara bila kuficha data." },
+    "settings": { "title": "Mipangilio", "eyebrow": "Sehemu ya kusubiri", "body": "Mipangilio itahifadhi akaunti, kikao, nakala salama, na biashara." }
+  },
+  "today": {
+    "heroLabel": "Mauzo ya leo",
+    "saleCount_one": "Mauzo {{count}} yameandikwa leo",
+    "saleCount_other": "Mauzo {{count}} yameandikwa leo",
+    "emptySales": "Hakuna mauzo bado leo \u2014 tuma 'sold 2 sugar 6k' kwa nambari yako ya Gezi.",
+    "cashSection": "Fedha zinazoingia na kutoka",
+    "cashIn": "Fedha ndani",
+    "cashOut": "Fedha nje",
+    "lowStockTitle": "Tahadhari za bidhaa chache",
+    "lowStockLine": "Zimebaki {{qty}} {{unit}}, kiwango {{threshold}}",
+    "noLowStock": "Hakuna tahadhari ya bidhaa chache kwa sasa.",
+    "itemCount_one": "Bidhaa {{count}}",
+    "itemCount_other": "Bidhaa {{count}}",
+    "draftsTitle": "Drafti wazi kutoka WhatsApp",
+    "draftCount_one": "Uuzaji {{count}} unasubiri kuthibitishwa",
+    "draftCount_other": "Mauzo {{count}} yanasubiri kuthibitishwa",
+    "noDrafts": "Hakuna drafti za WhatsApp zinazosubiri hatua.",
+    "sparklineTitle": "Mauzo ya siku 7",
+    "highestLabel": "Juu zaidi",
+    "offline": "Nje ya mtandao \u2014 tunaonyesha yaliyosawazishwa mwisho",
+    "errorTitle": "Hatukuweza kupakia Leo.",
+    "errorBody": "Data yako iko salama. Jaribu tena muunganisho ukiwa thabiti.",
+    "retry": "Jaribu tena",
+    "provenance": "kupitia {{source}} \u00b7 {{time}}",
+    "draftSheetTitle": "Drafti ya WhatsApp",
+    "closeSheet": "Funga drafti",
+    "draftSummary": "Muhtasari wa drafti",
+    "amendPayload": "Rekebisha maelezo ya drafti",
+    "immutableDraft": "Drafti hii haiwezi kuhaririwa tena.",
+    "confirmDraft": "Thibitisha",
+    "amendDraft": "Rekebisha",
+    "cancelDraft": "Ghairi",
+    "draftActionError": "Hatukuweza kusasisha drafti hiyo. Data yako iko salama.",
+    "invalidPayload": "Maelezo ya drafti lazima yawe JSON object.",
+    "source": { "whatsapp": "WhatsApp", "web": "web", "mobile": "mobile", "api": "API", "pos": "POS", "inventory": "Bidhaa" },
+    "state": { "parsed": "Imesomwa", "pending_clarification": "Inahitaji jibu", "confirmed": "Imethibitishwa", "committed": "Imehifadhiwa", "cancelled": "Imeghairiwa" },
+    "action": { "sale": "Uuzaji", "purchase": "Ununuzi", "expense": "Gharama" }
   }
 }

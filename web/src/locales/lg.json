@@ -1,50 +1,63 @@
 {
   "nav": {
-    "today": "TODO",
-    "sales": "TODO",
-    "inventory": "TODO",
-    "customers": "TODO",
-    "reports": "TODO",
-    "settings": "TODO"
+    "today": "Leero",
+    "sales": "Ebintu ebitundiddwa",
+    "inventory": "Sitooki y'ebintu",
+    "customers": "Bakiriya",
+    "reports": "Alipoota",
+    "settings": "Enteekateeka"
   },
   "shell": {
     "product": "Gezi AI",
-    "primaryNavigation": "TODO",
-    "recordSale": "TODO",
-    "secure": "TODO",
-    "session": "TODO",
-    "lastSynced": "TODO"
+    "primaryNavigation": "Okulaga ekkubo ery'ekikulu",
+    "recordSale": "Wandiika okutunda",
+    "secure": "Kikuumibwa bulungi",
+    "session": "Omukutu gw'omusuubuzi",
+    "lastSynced": "Bikwataganyiziddwa kati"
   },
   "routes": {
-    "today": {
-      "title": "TODO",
-      "eyebrow": "TODO",
-      "body": "TODO"
-    },
-    "sales": {
-      "title": "TODO",
-      "eyebrow": "TODO",
-      "body": "TODO"
-    },
-    "inventory": {
-      "title": "TODO",
-      "eyebrow": "TODO",
-      "body": "TODO"
-    },
-    "customers": {
-      "title": "TODO",
-      "eyebrow": "TODO",
-      "body": "TODO"
-    },
-    "reports": {
-      "title": "TODO",
-      "eyebrow": "TODO",
-      "body": "TODO"
-    },
-    "settings": {
-      "title": "TODO",
-      "eyebrow": "TODO",
-      "body": "TODO"
-    }
+    "sales": { "title": "Ebintu ebitundiddwa", "eyebrow": "Ekifo eky'okulindiramu", "body": "Ebyatundiddwa bijja kulabikira wano nga biyita mu /api/v1." },
+    "inventory": { "title": "Sitooki y'ebintu", "eyebrow": "Ekifo eky'okulindiramu", "body": "Sitooki ejja kuva mu mazima ge gamu aga WhatsApp, POS, ne alipoota." },
+    "customers": { "title": "Bakiriya", "eyebrow": "Ekifo eky'okulindiramu", "body": "Ebikwata ku bakiriya bijja kusigala ku bizinensi eno yokka." },
+    "reports": { "title": "Alipoota", "eyebrow": "Ekifo eky'okulindiramu", "body": "Alipoota zijja kulaga embeera ya bizinensi mu ngeri etegeerekeka." },
+    "settings": { "title": "Enteekateeka", "eyebrow": "Ekifo eky'okulindiramu", "body": "Wano we wajja okubeera akawunti, obukuumi, ne backup." }
+  },
+  "today": {
+    "heroLabel": "Ebitundiddwa leero",
+    "saleCount_one": "Okutunda {{count}} kuwandiikiddwa leero",
+    "saleCount_other": "Okutunda {{count}} kuwandiikiddwa leero",
+    "emptySales": "Tewali bitundiddwa leero \u2014 weereza 'sold 2 sugar 6k' ku nnamba ya Gezi.",
+    "cashSection": "Ssente eziyingidde n'ezifulumye",
+    "cashIn": "Ssente eziyingidde",
+    "cashOut": "Ssente ezifulumye",
+    "lowStockTitle": "Okulabula ku sitooki entono",
+    "lowStockLine": "Wasigadde {{qty}} {{unit}}, ekkomo {{threshold}}",
+    "noLowStock": "Tewali kulabula kwa sitooki entono kati.",
+    "itemCount_one": "Ekintu {{count}}",
+    "itemCount_other": "Ebintu {{count}}",
+    "draftsTitle": "Draft za WhatsApp ezikyaliwo",
+    "draftCount_one": "Okutunda {{count}} kulindirira okukakasa",
+    "draftCount_other": "Okutunda {{count}} kulindirira okukakasa",
+    "noDrafts": "Tewali draft za WhatsApp ezirindirira okukolebwako.",
+    "sparklineTitle": "Ebitundiddwa mu nnaku 7",
+    "highestLabel": "Ekisinga obungi",
+    "offline": "Toli ku mutimbagano \u2014 tulaga ebyasembayo okukwataganyizibwa",
+    "errorTitle": "Tetuyinza kuleeta Leero kati.",
+    "errorBody": "Data yo eri bulungi. Gezaako nate omutimbagano nga guteeredde.",
+    "retry": "Gezaako nate",
+    "provenance": "nga kivudde ku {{source}} \u00b7 {{time}}",
+    "draftSheetTitle": "Draft ya WhatsApp",
+    "closeSheet": "Ggalawo draft",
+    "draftSummary": "Obufunze bwa draft",
+    "amendPayload": "Kyusa ebiri mu draft",
+    "immutableDraft": "Draft eno tekikyusibwa kati.",
+    "confirmDraft": "Kakasa",
+    "amendDraft": "Kyusa",
+    "cancelDraft": "Sazaamu",
+    "draftActionError": "Tetuyinza kukyusa draft eno. Data yo eri bulungi.",
+    "invalidPayload": "Ebiri mu draft birina okuba JSON object.",
+    "source": { "whatsapp": "WhatsApp", "web": "web", "mobile": "mobile", "api": "API", "pos": "POS", "inventory": "Sitooki" },
+    "state": { "parsed": "Etegeereddwa", "pending_clarification": "Yeetaaga eky'okuddamu", "confirmed": "Ekakasiddwa", "committed": "Ewandiikiddwa", "cancelled": "Esaziddwamu" },
+    "action": { "sale": "Okutunda", "purchase": "Okugula", "expense": "Ensaasaanya" }
   }
 }
