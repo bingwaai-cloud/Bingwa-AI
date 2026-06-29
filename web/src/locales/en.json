@@ -1,0 +1,50 @@
+{
+  "nav": {
+    "today": "Today",
+    "sales": "Sales",
+    "inventory": "Inventory",
+    "customers": "Customers",
+    "reports": "Reports",
+    "settings": "Settings"
+  },
+  "shell": {
+    "product": "Gezi AI",
+    "primaryNavigation": "Primary navigation",
+    "recordSale": "Record sale",
+    "secure": "Secure",
+    "session": "Web session",
+    "lastSynced": "Last synced just now"
+  },
+  "routes": {
+    "today": {
+      "title": "Today",
+      "eyebrow": "Foundation placeholder",
+      "body": "The Today dashboard will show the business snapshot here after the API screens land."
+    },
+    "sales": {
+      "title": "Sales",
+      "eyebrow": "Foundation placeholder",
+      "body": "Sales records will appear here through the shared /api/v1 contract."
+    },
+    "inventory": {
+      "title": "Inventory",
+      "eyebrow": "Foundation placeholder",
+      "body": "Inventory will use the same source of truth as WhatsApp, POS, and reports."
+    },
+    "customers": {
+      "title": "Customers",
+      "eyebrow": "Foundation placeholder",
+      "body": "Customer records will stay tenant-scoped and available across channels."
+    },
+    "reports": {
+      "title": "Reports",
+      "eyebrow": "Foundation placeholder",
+      "body": "Reports will make business performance readable without hiding the raw data."
+    },
+    "settings": {
+      "title": "Settings",
+      "eyebrow": "Foundation placeholder",
+      "body": "Settings will hold account, session, backup, and business controls."
+    }
+  }
+}

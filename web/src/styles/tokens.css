@@ -1,0 +1,17 @@
+:root {
+  --gezi-green-900: #0A3D2C;
+  --gezi-green-700: #0E6B4A;
+  --gezi-green-100: #E3F2EC;
+  --gezi-gold-500: #E8A317;
+  --ink-900: #101418;
+  --ink-600: #4A5560;
+  --ink-400: #8A95A1;
+  --surface-0: #FFFFFF;
+  --surface-1: #F6F8F7;
+  --line: #E2E8E5;
+  --danger-600: #C2362B;
+  --warn-600: #B97A00;
+  --info-600: #1F6FB2;
+  --radius-card: 8px;
+  --radius-control: 6px;
+}

@@ -1,0 +1,50 @@
+{
+  "nav": {
+    "today": "TODO",
+    "sales": "TODO",
+    "inventory": "TODO",
+    "customers": "TODO",
+    "reports": "TODO",
+    "settings": "TODO"
+  },
+  "shell": {
+    "product": "Gezi AI",
+    "primaryNavigation": "TODO",
+    "recordSale": "TODO",
+    "secure": "TODO",
+    "session": "TODO",
+    "lastSynced": "TODO"
+  },
+  "routes": {
+    "today": {
+      "title": "TODO",
+      "eyebrow": "TODO",
+      "body": "TODO"
+    },
+    "sales": {
+      "title": "TODO",
+      "eyebrow": "TODO",
+      "body": "TODO"
+    },
+    "inventory": {
+      "title": "TODO",
+      "eyebrow": "TODO",
+      "body": "TODO"
+    },
+    "customers": {
+      "title": "TODO",
+      "eyebrow": "TODO",
+      "body": "TODO"
+    },
+    "reports": {
+      "title": "TODO",
+      "eyebrow": "TODO",
+      "body": "TODO"
+    },
+    "settings": {
+      "title": "TODO",
+      "eyebrow": "TODO",
+      "body": "TODO"
+    }
+  }
+}
