@@ -35,7 +35,7 @@ import { db } from '../../src/db.js'
 import { getCollectionStatus } from '../../src/payments/momoClient.js'
 import { createTestTenant, makeToken, cleanupTenant, type TestTenant } from '../fixtures/tenant.js'
 
-const mockGetStatus = getCollectionStatus as jest.Mocked<typeof getCollectionStatus>
+const mockGetStatus = getCollectionStatus as unknown as jest.Mock
 
 const TEST_TENANT_ID = 'c0ffee17-0000-0000-0000-0000000000f1'
 const TEST_PHONE = '+256772170001'

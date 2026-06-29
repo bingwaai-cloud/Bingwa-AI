@@ -1,23 +1,23 @@
 /**
  * WP-17 C-1 — under PAYMENT_PROVIDER=flutterwave the LEGACY callbacks must not
- * exist (404). Mounting is decided at module load, so this needs its own file.
+ * exist (404). Mounting is decided at module load, so jest.resetModules() forces
+ * a fresh import after setting the env.
  */
 
-process.env['PAYMENT_PROVIDER'] = 'flutterwave'
-
-import request from 'supertest'
 import type { Express } from 'express'
-
-import { createApp } from '../../src/app.js'
-import { db } from '../../src/db.js'
+import request from 'supertest'
 
 let app: Express
 
-beforeAll(() => {
+beforeAll(async () => {
+  jest.resetModules()
+  process.env['PAYMENT_PROVIDER'] = 'flutterwave'
+  const { createApp } = await import('../../src/app.js')
   app = createApp()
 })
 
 afterAll(async () => {
+  const { db } = await import('../../src/db.js')
   await db.$disconnect()
 })
 

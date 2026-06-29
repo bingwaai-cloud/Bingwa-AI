@@ -78,7 +78,6 @@ describe('Audit rollback — real sale path, audit insert forced to fail', () =>
     mockedAudit.mockImplementation(realAudit)   // default: behave normally
     await withTenant(TENANT_ID, async (tx) => {
       await tx.sale.deleteMany({})
-      await tx.auditLog.deleteMany({})
       await tx.receipt.deleteMany({})
       await tx.item.update({ where: { id: ITEM_ID }, data: { qtyInStock: INITIAL_QTY, deletedAt: null } })
     })

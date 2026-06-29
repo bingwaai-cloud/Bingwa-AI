@@ -18,7 +18,7 @@ async function resetState(): Promise<void> {
   await withTenant(TEST_TENANT_ID, async (tx) => {
     await tx.supplier.deleteMany({})
     await tx.purchase.deleteMany({})
-    await tx.auditLog.deleteMany({})
+    
     await tx.item.update({
       where: { id: TEST_ITEM_ID },
       data: { qtyInStock: 2 },

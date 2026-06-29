@@ -32,7 +32,7 @@ async function resetItemStock(): Promise<void> {
   await withTenant(TEST_TENANT_ID, async (tx) => {
     await tx.receipt.deleteMany({})
     await tx.sale.deleteMany({})
-    await tx.auditLog.deleteMany({})
+    
     await tx.priceHistory.deleteMany({})
     await tx.item.update({ where: { id: TEST_ITEM_ID }, data: { qtyInStock: INITIAL_QTY, deletedAt: null } })
     await tx.item.update({ where: { id: SOAP_ITEM_ID }, data: { qtyInStock: INITIAL_QTY, deletedAt: null } })

@@ -110,7 +110,7 @@ describe('Draft transactions', () => {
       await tx.priceHistory.deleteMany({})
       await tx.sale.deleteMany({})
       await tx.purchase.deleteMany({})
-      await tx.auditLog.deleteMany({})
+      
       await tx.expense.deleteMany({})
       await tx.item.update({ where: { id: ITEM_ID }, data: { qtyInStock: 20 } })
       await tx.item.update({ where: { id: SOAP_ID }, data: { qtyInStock: 20 } })

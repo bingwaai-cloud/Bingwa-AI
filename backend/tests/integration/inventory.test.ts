@@ -18,7 +18,7 @@ const LOW_THRESHOLD  = 5
 
 async function resetItems(): Promise<void> {
   await withTenant(TEST_TENANT_ID, async (tx) => {
-    await tx.auditLog.deleteMany({})
+    
     await tx.item.deleteMany({ where: { id: { not: TEST_ITEM_ID } } })
     await tx.item.update({
       where: { id: TEST_ITEM_ID },
