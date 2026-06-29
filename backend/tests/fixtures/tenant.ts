@@ -103,7 +103,6 @@ export async function cleanupTenant(tenantId: string): Promise<void> {
     await tx.priceHistory.deleteMany({})
     await tx.sale.deleteMany({})
     await tx.purchase.deleteMany({})
-    await tx.auditLog.deleteMany({})
     await tx.marketingBroadcast.deleteMany({})
     await tx.expense.deleteMany({})
     await tx.unknownMessage.deleteMany({})

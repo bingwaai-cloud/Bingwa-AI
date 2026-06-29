@@ -3,21 +3,13 @@
  * exist (404). Mounting is decided at module load, so this needs its own file.
  */
 
-import { jest } from '@jest/globals'
-import request from 'supertest'
-
 process.env['PAYMENT_PROVIDER'] = 'flutterwave'
 
-jest.unstable_mockModule('../../src/channels/whatsapp/whatsappClient.js', () => ({
-  sendTextMessage: jest.fn().mockImplementation(() => Promise.resolve()),
-  markMessageRead: jest.fn().mockImplementation(() => Promise.resolve()),
-  getWhatsAppProvider: jest.fn(() => 'meta'),
-}))
-
-const { createApp } = await import('../../src/app.js')
-const { db } = await import('../../src/db.js')
-
+import request from 'supertest'
 import type { Express } from 'express'
+
+import { createApp } from '../../src/app.js'
+import { db } from '../../src/db.js'
 
 let app: Express
 
