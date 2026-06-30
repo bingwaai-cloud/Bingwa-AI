@@ -16,17 +16,37 @@
     "lastSynced": "Imesawazishwa sasa hivi"
   },
   "routes": {
-    "sales": { "title": "Mauzo", "eyebrow": "Sehemu ya kusubiri", "body": "Rekodi za mauzo zitaonekana hapa kupitia mkataba wa /api/v1." },
-    "inventory": { "title": "Bidhaa dukani", "eyebrow": "Sehemu ya kusubiri", "body": "Bidhaa zitatumia chanzo kilekile cha WhatsApp, POS, na ripoti." },
-    "customers": { "title": "Wateja", "eyebrow": "Sehemu ya kusubiri", "body": "Rekodi za wateja zitabaki ndani ya biashara hii." },
-    "reports": { "title": "Ripoti", "eyebrow": "Sehemu ya kusubiri", "body": "Ripoti zitaonyesha hali ya biashara bila kuficha data." },
-    "settings": { "title": "Mipangilio", "eyebrow": "Sehemu ya kusubiri", "body": "Mipangilio itahifadhi akaunti, kikao, nakala salama, na biashara." }
+    "sales": {
+      "title": "Mauzo",
+      "eyebrow": "Sehemu ya kusubiri",
+      "body": "Rekodi za mauzo zitaonekana hapa kupitia mkataba wa /api/v1."
+    },
+    "inventory": {
+      "title": "Bidhaa dukani",
+      "eyebrow": "Sehemu ya kusubiri",
+      "body": "Bidhaa zitatumia chanzo kilekile cha WhatsApp, POS, na ripoti."
+    },
+    "customers": {
+      "title": "Wateja",
+      "eyebrow": "Sehemu ya kusubiri",
+      "body": "Rekodi za wateja zitabaki ndani ya biashara hii."
+    },
+    "reports": {
+      "title": "Ripoti",
+      "eyebrow": "Sehemu ya kusubiri",
+      "body": "Ripoti zitaonyesha hali ya biashara bila kuficha data."
+    },
+    "settings": {
+      "title": "Mipangilio",
+      "eyebrow": "Sehemu ya kusubiri",
+      "body": "Mipangilio itahifadhi akaunti, kikao, nakala salama, na biashara."
+    }
   },
   "today": {
     "heroLabel": "Mauzo ya leo",
     "saleCount_one": "Mauzo {{count}} yameandikwa leo",
     "saleCount_other": "Mauzo {{count}} yameandikwa leo",
-    "emptySales": "Hakuna mauzo bado leo \u2014 tuma 'sold 2 sugar 6k' kwa nambari yako ya Gezi.",
+    "emptySales": "Hakuna mauzo bado leo — tuma 'sold 2 sugar 6k' kwa nambari yako ya Gezi.",
     "cashSection": "Fedha zinazoingia na kutoka",
     "cashIn": "Fedha ndani",
     "cashOut": "Fedha nje",
@@ -41,11 +61,11 @@
     "noDrafts": "Hakuna drafti za WhatsApp zinazosubiri hatua.",
     "sparklineTitle": "Mauzo ya siku 7",
     "highestLabel": "Juu zaidi",
-    "offline": "Nje ya mtandao \u2014 tunaonyesha yaliyosawazishwa mwisho",
+    "offline": "Nje ya mtandao — tunaonyesha yaliyosawazishwa mwisho",
     "errorTitle": "Hatukuweza kupakia Leo.",
     "errorBody": "Data yako iko salama. Jaribu tena muunganisho ukiwa thabiti.",
     "retry": "Jaribu tena",
-    "provenance": "kupitia {{source}} \u00b7 {{time}}",
+    "provenance": "kupitia {{source}} · {{time}}",
     "draftSheetTitle": "Drafti ya WhatsApp",
     "closeSheet": "Funga drafti",
     "draftSummary": "Muhtasari wa drafti",
@@ -56,8 +76,102 @@
     "cancelDraft": "Ghairi",
     "draftActionError": "Hatukuweza kusasisha drafti hiyo. Data yako iko salama.",
     "invalidPayload": "Maelezo ya drafti lazima yawe JSON object.",
-    "source": { "whatsapp": "WhatsApp", "web": "web", "mobile": "mobile", "api": "API", "pos": "POS", "inventory": "Bidhaa" },
-    "state": { "parsed": "Imesomwa", "pending_clarification": "Inahitaji jibu", "confirmed": "Imethibitishwa", "committed": "Imehifadhiwa", "cancelled": "Imeghairiwa" },
-    "action": { "sale": "Uuzaji", "purchase": "Ununuzi", "expense": "Gharama" }
+    "source": {
+      "whatsapp": "WhatsApp",
+      "web": "web",
+      "mobile": "mobile",
+      "api": "API",
+      "pos": "POS",
+      "inventory": "Bidhaa"
+    },
+    "state": {
+      "parsed": "Imesomwa",
+      "pending_clarification": "Inahitaji jibu",
+      "confirmed": "Imethibitishwa",
+      "committed": "Imehifadhiwa",
+      "cancelled": "Imeghairiwa"
+    },
+    "action": {
+      "sale": "Uuzaji",
+      "purchase": "Ununuzi",
+      "expense": "Gharama"
+    }
+  },
+  "common": {
+    "provenance": "kupitia {{source}} ? {{time}}",
+    "provenanceLabel": "Chanzo",
+    "source": {
+      "whatsapp": "WhatsApp",
+      "web": "web",
+      "mobile": "mobile",
+      "api": "API",
+      "pos": "POS",
+      "inventory": "Bidhaa"
+    },
+    "exportCsv": "Pakua CSV",
+    "from": "Kutoka",
+    "to": "Hadi",
+    "date": "Tarehe",
+    "open": "Fungua",
+    "close": "Funga",
+    "previous": "Iliyotangulia",
+    "next": "Inayofuata",
+    "search": "Tafuta",
+    "blank": "-",
+    "lastUpdated": "Ilisasishwa mwisho",
+    "errorBody": "Data yako iko salama. Jaribu tena mtandao ukitulia.",
+    "pageStatus": "Ukurasa {{page}} kati ya {{pages}} ? rekodi {{total}}"
+  },
+  "sales": {
+    "title": "Mauzo",
+    "total": "Mauzo {{count}} katika muda huu",
+    "rangeClamped": "Muda wa tarehe umefungwa kwa siku 90.",
+    "errorTitle": "Hatukuweza kupakia mauzo.",
+    "empty": "Hakuna mauzo katika muda huu - tuma 'sold 2 sugar 6k' kwa namba ya Gezi.",
+    "item": "Bidhaa",
+    "qty": "Kiasi",
+    "unitPrice": "Bei ya moja",
+    "totalPrice": "Jumla",
+    "detailTitle": "Maelezo ya mauzo",
+    "lines": "Bidhaa za mauzo"
+  },
+  "inventory": {
+    "title": "Bidhaa dukani",
+    "total": "Bidhaa {{count}} dukani",
+    "errorTitle": "Hatukuweza kupakia bidhaa.",
+    "empty": "Hakuna bidhaa bado.",
+    "item": "Bidhaa",
+    "qty": "Kiasi",
+    "threshold": "Kiwango cha tahadhari",
+    "typicalPrice": "Bei ya kawaida",
+    "lastSold": "Iliuzwa mwisho",
+    "gapsTitle": "Mapengo ya backend ya kufuatilia"
+  },
+  "customers": {
+    "title": "Wateja",
+    "total": "Wateja {{count}}",
+    "errorTitle": "Hatukuweza kupakia wateja.",
+    "empty": "Hakuna wateja waliopatikana.",
+    "search": "Tafuta wateja",
+    "customer": "Mteja",
+    "phone": "Simu",
+    "visits": "Ziara",
+    "totalPurchases": "Jumla ya manunuzi",
+    "lastVisit": "Ziara ya mwisho",
+    "purchaseHistoryGap": "Pengo la backend: GET /api/v1/customers/:id/purchases haipo, hivyo historia ya manunuzi haijaonyeshwa."
+  },
+  "reports": {
+    "title": "Ripoti",
+    "total": "Muhtasari wa siku 7 na siku 30",
+    "errorTitle": "Hatukuweza kupakia ripoti.",
+    "endpointGap": "Pengo la backend: hakuna reports summary endpoint; ukurasa huu unatengeneza charts kutoka sales na purchases list endpoints.",
+    "empty": "Hakuna mauzo au manunuzi ndani ya siku 30 zilizopita.",
+    "sales30": "Mauzo, siku 30",
+    "purchases30": "Manunuzi, siku 30",
+    "daily": "Muhtasari wa kila siku, siku 7",
+    "weekly": "Muhtasari wa kila wiki, siku 30",
+    "monthly": "Muhtasari wa kila mwezi",
+    "sales": "Mauzo",
+    "purchases": "Manunuzi"
   }
 }

@@ -2,6 +2,7 @@ export type ApiMeta = {
   total?: number;
   page?: number;
   perPage?: number;
+  lowStockCount?: number;
 };
 
 export type ApiError = {
@@ -110,7 +111,23 @@ export type InventoryItem = {
   unit: string;
   qtyInStock: number;
   lowStockThreshold: number;
+  typicalSellPrice?: number | null;
+  typicalBuyPrice?: number | null;
   createdAt: string;
+  updatedAt?: string;
+};
+
+export type CustomerRecord = {
+  id: string;
+  phone: string | null;
+  name: string | null;
+  notes: string | null;
+  visitCount: number;
+  totalPurchases: number;
+  lastVisitedAt: string | null;
+  optedInMarketing: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type DraftState = "parsed" | "pending_clarification" | "confirmed" | "committed" | "cancelled";
@@ -138,6 +155,7 @@ type ListParams = {
   to?: string;
   page?: number;
   perPage?: number;
+  search?: string;
 };
 
 function queryString(params: ListParams): string {
@@ -157,12 +175,28 @@ export async function listSales(params: ListParams = {}): Promise<ApiSuccess<Sal
   return apiRequest<SaleRecord[]>(`/api/v1/sales${queryString(params)}` as `/api/v1/${string}`);
 }
 
+export async function getSale(id: string): Promise<SaleRecord> {
+  return (await apiRequest<SaleRecord>(`/api/v1/sales/${id}` as `/api/v1/${string}`)).data;
+}
+
 export async function listPurchases(params: ListParams = {}): Promise<ApiSuccess<PurchaseRecord[]>> {
   return apiRequest<PurchaseRecord[]>(`/api/v1/purchases${queryString(params)}` as `/api/v1/${string}`);
 }
 
 export async function listLowStockItems(): Promise<InventoryItem[]> {
   return (await apiRequest<InventoryItem[]>("/api/v1/inventory/low-stock")).data;
+}
+
+export async function listInventory(): Promise<ApiSuccess<InventoryItem[]>> {
+  return apiRequest<InventoryItem[]>("/api/v1/inventory");
+}
+
+export async function listCustomers(params: Pick<ListParams, "page" | "perPage" | "search"> = {}): Promise<ApiSuccess<CustomerRecord[]>> {
+  return apiRequest<CustomerRecord[]>(`/api/v1/customers${queryString(params)}` as `/api/v1/${string}`);
+}
+
+export async function getCustomer(id: string): Promise<CustomerRecord> {
+  return (await apiRequest<CustomerRecord>(`/api/v1/customers/${id}` as `/api/v1/${string}`)).data;
 }
 
 export async function listDrafts(params: Pick<ListParams, "page" | "perPage"> = {}): Promise<ApiSuccess<DraftRecord[]>> {
