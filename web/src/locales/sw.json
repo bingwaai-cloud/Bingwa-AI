@@ -145,7 +145,8 @@
     "threshold": "Kiwango cha tahadhari",
     "typicalPrice": "Bei ya kawaida",
     "lastSold": "Iliuzwa mwisho",
-    "gapsTitle": "Mapengo ya backend ya kufuatilia"
+    "gapsTitle": "Mapengo ya backend ya kufuatilia",
+    "search": "Tafuta bidhaa"
   },
   "customers": {
     "title": "Wateja",
@@ -158,13 +159,15 @@
     "visits": "Ziara",
     "totalPurchases": "Jumla ya manunuzi",
     "lastVisit": "Ziara ya mwisho",
-    "purchaseHistoryGap": "Pengo la backend: GET /api/v1/customers/:id/purchases haipo, hivyo historia ya manunuzi haijaonyeshwa."
+    "purchaseHistory": "Historia ya manunuzi",
+    "noPurchaseHistory": "Hakuna historia ya manunuzi bado.",
+    "purchaseHistoryError": "Hatukuweza kupakia historia ya manunuzi."
   },
   "reports": {
     "title": "Ripoti",
     "total": "Muhtasari wa siku 7 na siku 30",
     "errorTitle": "Hatukuweza kupakia ripoti.",
-    "endpointGap": "Pengo la backend: hakuna reports summary endpoint; ukurasa huu unatengeneza charts kutoka sales na purchases list endpoints.",
+    "endpointGap": "Ripoti zinatumia server summaries ili jumla ziwe sahihi.",
     "empty": "Hakuna mauzo au manunuzi ndani ya siku 30 zilizopita.",
     "sales30": "Mauzo, siku 30",
     "purchases30": "Manunuzi, siku 30",

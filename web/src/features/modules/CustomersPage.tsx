@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 
 import { Money } from "@/components/Money";
 import { Button } from "@/components/ui/button";
-import { listCustomers, type CustomerRecord } from "@/lib/api";
+import { listCustomerPurchases, listCustomers, type CustomerRecord, type SaleRecord } from "@/lib/api";
 
 import {
   DetailPanel,
@@ -101,9 +101,6 @@ export function CustomersPage(): React.ReactElement {
         <ExportButton busy={exporting} onExport={() => void exportRows()} label={t("common.exportCsv")} />
       </PageHeader>
 
-      <div className="rounded-lg border border-warn-600 bg-surface-0 p-4 text-sm font-semibold text-warn-600">
-        {t("customers.purchaseHistoryGap")}
-      </div>
 
       {rows.length === 0 ? <EmptyState message={t("customers.empty")} /> : (
         <TableShell labelledBy="customers-title">
@@ -142,12 +139,42 @@ export function CustomersPage(): React.ReactElement {
           <Field label={t("customers.totalPurchases")} value={<Money amount={selected.totalPurchases} size="card" />} money />
           <Field label={t("customers.visits")} value={selected.visitCount} />
           <Field label={t("customers.lastVisit")} value={selected.lastVisitedAt ? formatDateTime(selected.lastVisitedAt) : t("common.blank")} />
-          <div className="rounded-lg border border-warn-600 bg-surface-0 p-4 text-sm font-semibold text-warn-600">
-            {t("customers.purchaseHistoryGap")}
-          </div>
+          <CustomerPurchaseHistory customer={selected} />
           <Button variant="secondary" onClick={() => setSelected(null)}>{t("common.close")}</Button>
         </DetailPanel>
       ) : null}
+    </div>
+  );
+}
+
+
+function CustomerPurchaseHistory({ customer }: { customer: CustomerRecord }): React.ReactElement {
+  const { t } = useTranslation();
+  const query = useQuery({
+    queryKey: ["customers", customer.id, "purchases"],
+    queryFn: () => listCustomerPurchases(customer.id, { page: 1, perPage: 5 })
+  });
+
+  if (query.isLoading) return <SkeletonRows />;
+  if (query.isError || !query.data) return <EmptyState message={t("customers.purchaseHistoryError")} />;
+
+  const rows: SaleRecord[] = query.data.data;
+  if (rows.length === 0) return <EmptyState message={t("customers.noPurchaseHistory")} />;
+
+  return (
+    <div className="rounded-lg border border-line">
+      <div className="border-b border-line bg-surface-1 p-3 text-sm font-bold text-ink-900">{t("customers.purchaseHistory")}</div>
+      <div className="divide-y divide-line">
+        {rows.map((sale) => (
+          <div key={sale.id} className="grid grid-cols-[1fr_auto] gap-3 p-3">
+            <div className="min-w-0">
+              <p className="truncate font-bold text-ink-900">{sale.itemName}</p>
+              <p className="text-sm font-semibold text-ink-600">{formatDateTime(sale.createdAt)}</p>
+            </div>
+            <Money amount={sale.totalPrice} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

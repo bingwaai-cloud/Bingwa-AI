@@ -115,6 +115,7 @@ export type InventoryItem = {
   typicalBuyPrice?: number | null;
   createdAt: string;
   updatedAt?: string;
+  lastSoldAt?: string | null;
 };
 
 export type CustomerRecord = {
@@ -156,6 +157,9 @@ type ListParams = {
   page?: number;
   perPage?: number;
   search?: string;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+  groupBy?: "day" | "week" | "month";
 };
 
 function queryString(params: ListParams): string {
@@ -187,8 +191,8 @@ export async function listLowStockItems(): Promise<InventoryItem[]> {
   return (await apiRequest<InventoryItem[]>("/api/v1/inventory/low-stock")).data;
 }
 
-export async function listInventory(): Promise<ApiSuccess<InventoryItem[]>> {
-  return apiRequest<InventoryItem[]>("/api/v1/inventory");
+export async function listInventory(params: Pick<ListParams, "page" | "perPage" | "search" | "sortBy" | "sortOrder"> = {}): Promise<ApiSuccess<InventoryItem[]>> {
+  return apiRequest<InventoryItem[]>(`/api/v1/inventory${queryString(params)}` as `/api/v1/${string}`);
 }
 
 export async function listCustomers(params: Pick<ListParams, "page" | "perPage" | "search"> = {}): Promise<ApiSuccess<CustomerRecord[]>> {
@@ -197,6 +201,33 @@ export async function listCustomers(params: Pick<ListParams, "page" | "perPage" 
 
 export async function getCustomer(id: string): Promise<CustomerRecord> {
   return (await apiRequest<CustomerRecord>(`/api/v1/customers/${id}` as `/api/v1/${string}`)).data;
+}
+
+export async function listCustomerPurchases(id: string, params: Pick<ListParams, "from" | "to" | "page" | "perPage"> = {}): Promise<ApiSuccess<SaleRecord[]>> {
+  return apiRequest<SaleRecord[]>(`/api/v1/customers/${id}/purchases${queryString(params)}` as `/api/v1/${string}`);
+}
+
+export type SummaryBucket = {
+  periodStart: string;
+  totalUgx: number;
+  count: number;
+};
+
+export type SummaryResponse = {
+  groupBy: "day" | "week" | "month";
+  from: string;
+  to: string;
+  buckets: SummaryBucket[];
+  totalUgx: number;
+  count: number;
+};
+
+export async function getSalesSummary(params: Pick<ListParams, "from" | "to" | "groupBy">): Promise<SummaryResponse> {
+  return (await apiRequest<SummaryResponse>(`/api/v1/sales/summary${queryString(params)}` as `/api/v1/${string}`)).data;
+}
+
+export async function getPurchasesSummary(params: Pick<ListParams, "from" | "to" | "groupBy">): Promise<SummaryResponse> {
+  return (await apiRequest<SummaryResponse>(`/api/v1/purchases/summary${queryString(params)}` as `/api/v1/${string}`)).data;
 }
 
 export async function listDrafts(params: Pick<ListParams, "page" | "perPage"> = {}): Promise<ApiSuccess<DraftRecord[]>> {

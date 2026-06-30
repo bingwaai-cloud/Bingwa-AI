@@ -145,7 +145,8 @@
     "threshold": "Low-stock mark",
     "typicalPrice": "Typical price",
     "lastSold": "Last sold",
-    "gapsTitle": "Backend gaps flagged for follow-up"
+    "gapsTitle": "Backend gaps flagged for follow-up",
+    "search": "Search inventory"
   },
   "customers": {
     "title": "Customers",
@@ -158,13 +159,15 @@
     "visits": "Visits",
     "totalPurchases": "Total purchases",
     "lastVisit": "Last visit",
-    "purchaseHistoryGap": "Backend gap: GET /api/v1/customers/:id/purchases is not present, so purchase history is not shown yet."
+    "purchaseHistory": "Purchase history",
+    "noPurchaseHistory": "No purchase history yet.",
+    "purchaseHistoryError": "We couldn't load purchase history."
   },
   "reports": {
     "title": "Reports",
     "total": "7-day daily and 30-day weekly/monthly views",
     "errorTitle": "We couldn't load reports.",
-    "endpointGap": "Backend gap: no reports summary endpoint exists, so this screen composes charts from sales and purchases list endpoints.",
+    "endpointGap": "Reports use server summaries for accurate totals at volume.",
     "empty": "No sales or purchases in the last 30 days.",
     "sales30": "Sales, last 30 days",
     "purchases30": "Purchases, last 30 days",

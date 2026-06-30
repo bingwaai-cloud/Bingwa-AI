@@ -1,7 +1,7 @@
 import type React from "react";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronRight, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Money } from "@/components/Money";
@@ -14,6 +14,7 @@ import {
   EmptyState,
   ErrorState,
   ExportButton,
+  EXPORT_PAGE_SIZE,
   Field,
   formatDateTime,
   PAGE_SIZE,
@@ -24,16 +25,6 @@ import {
   downloadCsv,
   toCsv
 } from "./ModuleUtils";
-
-const INVENTORY_GAPS = [
-  "GET /api/v1/inventory ignores search/query parameters, so this screen does not render a dead search box.",
-  "GET /api/v1/inventory is not paginated; the UI paginates the returned rows locally and flags the backend gap.",
-  "GET /api/v1/inventory does not provide last-sold per item, so Last sold is intentionally blank."
-];
-
-function hasTypicalPrice(item: InventoryItem): boolean {
-  return item.typicalSellPrice !== undefined || item.typicalBuyPrice !== undefined;
-}
 
 function typicalPrice(item: InventoryItem): number | null {
   return item.typicalSellPrice ?? item.typicalBuyPrice ?? null;
@@ -47,7 +38,7 @@ function inventoryCsvRows(rows: InventoryItem[]): Array<Record<string, string | 
     qtyInStock: item.qtyInStock,
     lowStockThreshold: item.lowStockThreshold,
     typicalPrice: typicalPrice(item),
-    lastSold: null
+    lastSold: item.lastSoldAt ?? null
   }));
 }
 
@@ -55,18 +46,31 @@ export function InventoryPage(): React.ReactElement {
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<InventoryItem | null>(null);
+  const [searchText, setSearchText] = useState("");
+  const [search, setSearch] = useState("");
   const [exporting, setExporting] = useState(false);
 
-  const query = useQuery({ queryKey: ["inventory"], queryFn: listInventory });
+  const query = useQuery({ queryKey: ["inventory", page, search], queryFn: () => listInventory({ page, perPage: PAGE_SIZE, search: search || undefined, sortBy: "name", sortOrder: "asc" }) });
   const lowStockQuery = useQuery({ queryKey: ["inventory", "low-stock"], queryFn: listLowStockItems });
 
   const lowStockIds = useMemo(() => new Set((lowStockQuery.data ?? []).map((item) => item.id)), [lowStockQuery.data]);
 
-  const exportRows = (): void => {
-    if (!query.data) return;
+  const applySearch = (): void => {
+    setSearch(searchText.trim());
+    setPage(1);
+  };
+
+  const exportRows = async (): Promise<void> => {
     setExporting(true);
     try {
-      downloadCsv("gezi-inventory.csv", toCsv(inventoryCsvRows(query.data.data)));
+      const first = await listInventory({ page: 1, perPage: EXPORT_PAGE_SIZE, search: search || undefined, sortBy: "name", sortOrder: "asc" });
+      const totalRows = first.meta?.total ?? first.data.length;
+      const rows = [...first.data];
+      const pages = Math.ceil(totalRows / EXPORT_PAGE_SIZE);
+      for (let exportPage = 2; exportPage <= pages; exportPage += 1) {
+        rows.push(...(await listInventory({ page: exportPage, perPage: EXPORT_PAGE_SIZE, search: search || undefined, sortBy: "name", sortOrder: "asc" })).data);
+      }
+      downloadCsv("gezi-inventory.csv", toCsv(inventoryCsvRows(rows)));
     } finally {
       setExporting(false);
     }
@@ -75,24 +79,22 @@ export function InventoryPage(): React.ReactElement {
   if (query.isLoading) return <SkeletonRows />;
   if (query.isError || !query.data) return <ErrorState title={t("inventory.errorTitle")} body={t("common.errorBody")} onRetry={() => void query.refetch()} />;
 
-  const allRows = query.data.data;
-  const total = query.data.meta?.total ?? allRows.length;
-  const visibleRows = allRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const typicalPriceMissing = allRows.some((item) => !hasTypicalPrice(item));
+  const visibleRows = query.data.data;
+  const total = query.data.meta?.total ?? visibleRows.length;
 
   return (
     <div className="space-y-4">
-      <PageHeader title={t("inventory.title")} total={t("inventory.total", { count: total })} endpoint="GET /api/v1/inventory + GET /api/v1/inventory/low-stock">
-        <ExportButton busy={exporting} onExport={exportRows} label={t("common.exportCsv")} />
+      <PageHeader title={t("inventory.title")} total={t("inventory.total", { count: total })} endpoint="GET /api/v1/inventory?page=&perPage=&search= + GET /api/v1/inventory/low-stock">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:min-w-[320px]">
+          <label className="relative min-w-0 flex-1">
+            <span className="sr-only">{t("inventory.search")}</span>
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-ink-400" aria-hidden />
+            <input className="h-12 w-full rounded-md border border-line bg-surface-0 pl-10 pr-3 text-sm font-semibold text-ink-900" value={searchText} onChange={(event) => setSearchText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") applySearch(); }} placeholder={t("inventory.search")} />
+          </label>
+          <Button variant="secondary" onClick={applySearch}>{t("common.search")}</Button>
+        </div>
+        <ExportButton busy={exporting} onExport={() => void exportRows()} label={t("common.exportCsv")} />
       </PageHeader>
-
-      <div className="rounded-lg border border-warn-600 bg-surface-0 p-4 text-sm font-semibold text-warn-600">
-        <p className="font-bold">{t("inventory.gapsTitle")}</p>
-        <ul className="mt-2 list-disc space-y-1 pl-5">
-          {INVENTORY_GAPS.map((gap) => <li key={gap}>{gap}</li>)}
-          {typicalPriceMissing ? <li>Some inventory rows omit typicalSellPrice/typicalBuyPrice, so Typical price is blank for those rows.</li> : null}
-        </ul>
-      </div>
 
       {visibleRows.length === 0 ? <EmptyState message={t("inventory.empty")} /> : (
         <TableShell labelledBy="inventory-title">
@@ -122,7 +124,7 @@ export function InventoryPage(): React.ReactElement {
                     <td className="money-nums px-4 py-3 text-right font-semibold text-ink-900">{item.qtyInStock} {item.unit}</td>
                     <td className="money-nums px-4 py-3 text-right font-semibold text-ink-600">{item.lowStockThreshold}</td>
                     <td className="px-4 py-3 text-right">{price == null ? <span className="text-ink-400">{t("common.blank")}</span> : <Money amount={price} />}</td>
-                    <td className="px-4 py-3 font-semibold text-ink-400">{t("common.blank")}</td>
+                    <td className="px-4 py-3 font-semibold text-ink-600">{item.lastSoldAt ? formatDateTime(item.lastSoldAt) : t("common.blank")}</td>
                     <td className="px-4 py-3 text-right"><ChevronRight className="inline size-5 text-ink-400" aria-hidden /></td>
                   </tr>
                 );
@@ -139,7 +141,7 @@ export function InventoryPage(): React.ReactElement {
           <Field label={t("inventory.qty")} value={`${selected.qtyInStock} ${selected.unit}`} />
           <Field label={t("inventory.threshold")} value={selected.lowStockThreshold} />
           <Field label={t("inventory.typicalPrice")} value={typicalPrice(selected) == null ? t("common.blank") : <Money amount={typicalPrice(selected)!} size="card" />} money />
-          <Field label={t("inventory.lastSold")} value={t("common.blank")} />
+          <Field label={t("inventory.lastSold")} value={selected.lastSoldAt ? formatDateTime(selected.lastSoldAt) : t("common.blank")} />
           <Field label={t("common.lastUpdated")} value={formatDateTime(selected.updatedAt ?? selected.createdAt)} />
           <Button variant="secondary" onClick={() => setSelected(null)}>{t("common.close")}</Button>
         </DetailPanel>

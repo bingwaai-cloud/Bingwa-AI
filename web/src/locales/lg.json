@@ -145,7 +145,8 @@
     "threshold": "Ekkomo lya sitooki entono",
     "typicalPrice": "Bbeeyi etera okukozesebwa",
     "lastSold": "Kyatundibwa ddi",
-    "gapsTitle": "Ebitannaba kubeera mu backend ebyetaaga okukolebwako"
+    "gapsTitle": "Ebitannaba kubeera mu backend ebyetaaga okukolebwako",
+    "search": "Noonya mu sitooki"
   },
   "customers": {
     "title": "Bakiriya ba bizinensi yo",
@@ -158,13 +159,15 @@
     "visits": "Emirundi gy azze",
     "totalPurchases": "Omugatte gw ebyagula",
     "lastVisit": "Lwe yasembayo",
-    "purchaseHistoryGap": "Ekikyabulamu mu backend: GET /api/v1/customers/:id/purchases tekiriwo, n olwekyo ebyagulwa omukiriya tebinnalagibwa."
+    "purchaseHistory": "Ebyagulwa omukiriya",
+    "noPurchaseHistory": "Tannaba kuba na byagula.",
+    "purchaseHistoryError": "Tetuyinza kuleeta ebyagulwa omukiriya kati."
   },
   "reports": {
     "title": "Alipoota za bizinensi ezisomeka amangu",
     "total": "Ennaku 7 eza buli lunaku ne nnaku 30 eza wiiki/omwezi",
     "errorTitle": "Tetuyinza kuleeta alipoota kati.",
-    "endpointGap": "Ekikyabulamu mu backend: tewali reports summary endpoint; tukozesa sales ne purchases list endpoints okukola charts.",
+    "endpointGap": "Alipoota zikozesa server summaries okusobola okufuna omugatte omutuufu.",
     "empty": "Tewali kutunda oba kugula mu nnaku 30 eziyise.",
     "sales30": "Ebitundiddwa mu nnaku 30",
     "purchases30": "Ebiguliddwa mu nnaku 30",
