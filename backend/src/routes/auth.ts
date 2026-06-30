@@ -1,16 +1,14 @@
 import { Router } from 'express'
 import rateLimit from 'express-rate-limit'
 import * as authController from '../controllers/authController.js'
-import { authenticate } from '../middleware/auth.js'
+import { authenticate, optionalAuthenticate } from '../middleware/auth.js'
 
 export const authRouter = Router()
 
-// Strict rate limit on login to prevent brute-force
 const loginRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 5,
   keyGenerator: (req) => {
-    // Key by IP + phone combo to prevent distributed attacks
     const phone: string = (req.body as { phone?: string }).phone ?? ''
     return `${req.ip}:${phone}`
   },
@@ -18,17 +16,31 @@ const loginRateLimit = rateLimit({
     success: false,
     error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Too many login attempts. Please try again in 15 minutes.' },
   },
-  skipSuccessfulRequests: true, // only count failed attempts
+  skipSuccessfulRequests: true,
 })
 
-// POST /api/v1/auth/signup — public
+const twoFactorVerifyRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  keyGenerator: (req) => {
+    const token = (req.body as { twoFactorToken?: string }).twoFactorToken ?? req.headers['authorization'] ?? ''
+    return `${req.ip}:${token}`
+  },
+  message: {
+    success: false,
+    error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Too many two-factor attempts. Please try again in 15 minutes.' },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+})
+
 authRouter.post('/signup', authController.signup)
-
-// POST /api/v1/auth/login — public, rate-limited
 authRouter.post('/login', loginRateLimit, authController.login)
-
-// POST /api/v1/auth/refresh — public (refresh token is the credential)
 authRouter.post('/refresh', authController.refresh)
-
-// POST /api/v1/auth/logout — requires valid access token
 authRouter.post('/logout', authenticate, authController.logout)
+
+authRouter.post('/2fa/setup', authenticate, authController.setupTotp)
+authRouter.post('/2fa/verify', twoFactorVerifyRateLimit, optionalAuthenticate, authController.verifyTotp)
+authRouter.post('/2fa/recovery', twoFactorVerifyRateLimit, authController.verifyRecoveryCode)
+authRouter.post('/2fa/disable', authenticate, authController.disableTotp)

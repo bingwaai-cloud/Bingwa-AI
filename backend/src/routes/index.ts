@@ -54,12 +54,6 @@ if ((process.env['PAYMENT_PROVIDER'] ?? 'legacy') === 'legacy') {
 
 // ─── Authenticated + tenant-scoped routes ────────────────────────────────────
 
-// TODO(WP-22 / WP-17 M-1): role enforcement is unwired — requireRole() exists in
-// middleware/auth.ts but no route uses it, so every authenticated principal has
-// full access. Apply requireRole('owner') to marketing/settings/delete routes and
-// requireRole('owner','manager') to reports BEFORE staff/web principals exist.
-// Latent today (signup mints only owner tokens). See
-// docs/prompts/wp-17-security-review-findings.md (M-1).
 apiRouter.use('/v1/sales',      authenticate, tenantMiddleware, graceMiddleware, salesRouter)
 apiRouter.use('/v1/inventory',  authenticate, tenantMiddleware, inventoryRouter)
 apiRouter.use('/v1/purchases',  authenticate, tenantMiddleware, graceMiddleware, purchasesRouter)

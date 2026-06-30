@@ -91,6 +91,7 @@ module.exports = async function globalSetup() {
     '017_platform_settings.sql',
     '018_branch_id.sql',
     '019_audit_log_immutable.sql',       // WP-17 M-3: REVOKE UPDATE/DELETE on audit_log from gezi_app
+    '020_user_2fa.sql',
   ]
 
   const client = new Client({ connectionString: ownerUrl })

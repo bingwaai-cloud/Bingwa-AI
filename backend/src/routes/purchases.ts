@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { requireRole } from '../middleware/auth.js'
 import {
   handleCreatePurchase,
   handleGetPurchase,
@@ -16,7 +17,7 @@ export const purchasesRouter = Router()
 purchasesRouter.get('/', handleListPurchases)
 
 // GET  /api/v1/purchases/summary - grouped purchase totals
-purchasesRouter.get('/summary', handlePurchasesSummary)
+purchasesRouter.get('/summary', requireRole('owner', 'manager'), handlePurchasesSummary)
 
 // POST /api/v1/purchases         — record a new purchase (restocking)
 purchasesRouter.post('/', handleCreatePurchase)

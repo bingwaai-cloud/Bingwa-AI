@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { requireRole } from '../middleware/auth.js'
 import {
   handlePreviewBroadcast,
   handleSendBroadcast,
@@ -8,5 +9,5 @@ import {
 export const marketingRouter = Router()
 
 marketingRouter.get('/broadcasts',          handleListBroadcasts)
-marketingRouter.post('/broadcast/preview',  handlePreviewBroadcast)
-marketingRouter.post('/broadcast',          handleSendBroadcast)
+marketingRouter.post('/broadcast/preview',  requireRole('owner'), handlePreviewBroadcast)
+marketingRouter.post('/broadcast',          requireRole('owner'), handleSendBroadcast)

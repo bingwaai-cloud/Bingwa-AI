@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { requireRole } from '../middleware/auth.js'
 import {
   handleCreateSale,
   handleGetSale,
@@ -18,10 +19,10 @@ export const salesRouter = Router()
 salesRouter.get('/', handleListSales)
 
 // GET  /api/v1/sales/summary/today — today's revenue + sale count
-salesRouter.get('/summary/today', handleTodaySummary)
+salesRouter.get('/summary/today', requireRole('owner', 'manager'), handleTodaySummary)
 
 // GET  /api/v1/sales/summary       - grouped sales totals
-salesRouter.get('/summary', handleSalesSummary)
+salesRouter.get('/summary', requireRole('owner', 'manager'), handleSalesSummary)
 
 // POST /api/v1/sales              — record a new sale
 salesRouter.post('/', handleCreateSale)
@@ -30,4 +31,4 @@ salesRouter.post('/', handleCreateSale)
 salesRouter.get('/:id', handleGetSale)
 
 // DELETE /api/v1/sales/:id         — soft-delete (cancel) a sale; restores stock
-salesRouter.delete('/:id', handleCancelSale)
+salesRouter.delete('/:id', requireRole('owner'), handleCancelSale)

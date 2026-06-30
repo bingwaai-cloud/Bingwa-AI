@@ -4,8 +4,6 @@ import { asyncHandler } from '../middleware/asyncHandler.js'
 import { AppError, ErrorCodes } from '../utils/AppError.js'
 import * as authService from '../services/authService.js'
 
-// ─── Zod schemas ──────────────────────────────────────────────────────────────
-
 const SignupSchema = z.object({
   businessName: z.string().min(2).max(255),
   ownerName: z.string().min(2).max(255),
@@ -22,16 +20,43 @@ const LoginSchema = z.object({
 })
 
 const RefreshSchema = z.object({
-  refreshToken: z.string().min(1),
+  refreshToken: z.string().min(1).optional(),
 })
 
-// ─── Handlers ─────────────────────────────────────────────────────────────────
+const VerifyTotpSchema = z.object({
+  code: z.string().regex(/^\d{6}$/, 'Two-factor code must be 6 digits'),
+  twoFactorToken: z.string().min(1).optional(),
+})
 
-/**
- * POST /api/v1/auth/signup
- * Creates a new tenant, owner user, tenant schema, and free subscription.
- * Returns access + refresh tokens.
- */
+const RecoveryCodeSchema = z.object({
+  recoveryCode: z.string().min(8).max(64),
+  twoFactorToken: z.string().min(1).optional(),
+})
+
+const DisableTotpSchema = z.object({
+  password: z.string().min(1),
+})
+
+function authCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env['NODE_ENV'] === 'production',
+    sameSite: 'lax' as const,
+    path: '/',
+  }
+}
+
+function setSessionCookies(res: Response, tokens: { accessToken: string; refreshToken: string }): void {
+  res.cookie('accessToken', tokens.accessToken, { ...authCookieOptions(), maxAge: 15 * 60 * 1000 })
+  res.cookie('refreshToken', tokens.refreshToken, { ...authCookieOptions(), maxAge: 7 * 24 * 60 * 60 * 1000 })
+}
+
+function bearerToken(req: Request): string | undefined {
+  const header = req.headers['authorization']
+  if (!header || !header.startsWith('Bearer ')) return undefined
+  return header.slice(7)
+}
+
 export const signup = asyncHandler(async (req: Request, res: Response) => {
   const parsed = SignupSchema.safeParse(req.body)
   if (!parsed.success) {
@@ -43,6 +68,7 @@ export const signup = asyncHandler(async (req: Request, res: Response) => {
   }
 
   const result = await authService.signup(parsed.data)
+  setSessionCookies(res, result)
 
   res.status(201).json({
     success: true,
@@ -55,10 +81,6 @@ export const signup = asyncHandler(async (req: Request, res: Response) => {
   })
 })
 
-/**
- * POST /api/v1/auth/login
- * Authenticates an existing user, returns fresh token pair.
- */
 export const login = asyncHandler(async (req: Request, res: Response) => {
   const parsed = LoginSchema.safeParse(req.body)
   if (!parsed.success) {
@@ -67,6 +89,20 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
 
   const result = await authService.login(parsed.data.phone, parsed.data.password)
 
+  if ('twoFactorRequired' in result) {
+    res.status(200).json({
+      success: true,
+      data: {
+        twoFactorRequired: true,
+        twoFactorToken: result.twoFactorToken,
+        tenant: result.tenant,
+        user: result.user,
+      },
+    })
+    return
+  }
+
+  setSessionCookies(res, result)
   res.status(200).json({
     success: true,
     data: {
@@ -78,34 +114,66 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   })
 })
 
-/**
- * POST /api/v1/auth/refresh
- * Exchanges a valid refresh token for a new token pair (rotation).
- */
 export const refresh = asyncHandler(async (req: Request, res: Response) => {
   const parsed = RefreshSchema.safeParse(req.body)
-  if (!parsed.success) {
+  const cookieToken = ((req as Request & { cookies?: { refreshToken?: string } }).cookies)?.refreshToken
+  const refreshToken = parsed.success ? parsed.data.refreshToken ?? cookieToken : cookieToken
+  if (!refreshToken) {
     throw new AppError(ErrorCodes.VALIDATION_ERROR, 'refreshToken is required.', 400)
   }
 
-  const result = await authService.refreshTokens(parsed.data.refreshToken)
+  const result = await authService.refreshTokens(refreshToken)
+  setSessionCookies(res, result)
 
-  res.status(200).json({
-    success: true,
-    data: result,
-  })
+  res.status(200).json({ success: true, data: result })
 })
 
-/**
- * POST /api/v1/auth/logout
- * Revokes the refresh token. Requires a valid access token.
- */
+export const setupTotp = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user || !req.tenantId) throw new AppError(ErrorCodes.UNAUTHORIZED, 'Not authenticated.', 401)
+  const result = await authService.setupTotp(req.tenantId, req.user.userId)
+  res.status(200).json({ success: true, data: result })
+})
+
+export const verifyTotp = asyncHandler(async (req: Request, res: Response) => {
+  const parsed = VerifyTotpSchema.safeParse(req.body)
+  if (!parsed.success) throw new AppError(ErrorCodes.VALIDATION_ERROR, 'A valid 6-digit code is required.', 400)
+
+  if (req.user && req.tenantId) {
+    const result = await authService.verifyTotpForSetup(req.tenantId, req.user.userId, parsed.data.code)
+    res.status(200).json({ success: true, data: result })
+    return
+  }
+
+  const token = parsed.data.twoFactorToken ?? bearerToken(req)
+  const result = await authService.verifyTotpForLogin(token ?? '', parsed.data.code)
+  setSessionCookies(res, result)
+  res.status(200).json({ success: true, data: result })
+})
+
+export const verifyRecoveryCode = asyncHandler(async (req: Request, res: Response) => {
+  const parsed = RecoveryCodeSchema.safeParse(req.body)
+  if (!parsed.success) throw new AppError(ErrorCodes.VALIDATION_ERROR, 'A valid recovery code is required.', 400)
+  const token = parsed.data.twoFactorToken ?? bearerToken(req)
+  const result = await authService.verifyRecoveryCodeForLogin(token ?? '', parsed.data.recoveryCode)
+  setSessionCookies(res, result)
+  res.status(200).json({ success: true, data: result })
+})
+
+export const disableTotp = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user || !req.tenantId) throw new AppError(ErrorCodes.UNAUTHORIZED, 'Not authenticated.', 401)
+  const parsed = DisableTotpSchema.safeParse(req.body)
+  if (!parsed.success) throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Password is required.', 400)
+  await authService.disableTotp(req.tenantId, req.user.userId, parsed.data.password)
+  res.status(200).json({ success: true, data: { totpEnabled: false } })
+})
+
 export const logout = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user || !req.tenantId) {
     throw new AppError(ErrorCodes.UNAUTHORIZED, 'Not authenticated.', 401)
   }
 
   await authService.logout(req.tenantId, req.user.userId)
-
+  res.clearCookie('accessToken', authCookieOptions())
+  res.clearCookie('refreshToken', authCookieOptions())
   res.status(200).json({ success: true, data: { message: 'Logged out successfully.' } })
 })
