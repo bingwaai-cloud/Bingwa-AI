@@ -64,9 +64,9 @@ export async function handleIncomingMessage(
   const businessName = resolution.businessName
 
   const contextRecord = await withTenant(tenantId, (tx) => upsertUserContext(tx, tenantId, phone))
-  const dbItems = await withTenant(tenantId, (tx) => findAllItems(tx, tenantId))
+  const dbItemsPage = await withTenant(tenantId, (tx) => findAllItems(tx, tenantId, { perPage: 100 }))
 
-  const inventoryItems: InventoryItem[] = dbItems.map((i) => ({
+  const inventoryItems: InventoryItem[] = dbItemsPage.items.map((i) => ({
     id: i.id,
     name: i.name,
     nameNormalized: i.nameNormalized,

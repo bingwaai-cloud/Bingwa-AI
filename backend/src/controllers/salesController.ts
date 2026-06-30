@@ -2,12 +2,14 @@ import { type Request, type Response } from 'express'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/asyncHandler.js'
 import { AppError, ErrorCodes } from '../utils/AppError.js'
+import { DateRangeQuerySchema, SummaryGroupBySchema, boundedDateRange } from '../utils/queryParams.js'
 import { formatUGX, formatUGXShort } from '../nlp/normalizers.js'
 import {
   createSaleRecord,
   getSaleById,
   listSales,
   getTodaySummary,
+  getSalesSummary,
   cancelSale,
   type SaleResult,
 } from '../services/salesService.js'
@@ -56,6 +58,10 @@ const ListSalesSchema = z.object({
   itemId: z.string().uuid().optional(),
   page: z.coerce.number().int().positive().default(1),
   perPage: z.coerce.number().int().positive().max(100).default(20),
+})
+
+const SalesSummarySchema = DateRangeQuerySchema.extend({
+  groupBy: SummaryGroupBySchema,
 })
 
 function formatSaleWhatsApp(result: SaleResult): string {
@@ -168,6 +174,30 @@ export const handleTodaySummary = asyncHandler(async (_req: Request, res: Respon
   const summary = await getTodaySummary(tenantId)
 
   res.json({ success: true, data: summary })
+})
+
+export const handleSalesSummary = asyncHandler(async (req: Request, res: Response) => {
+  const tenantId = req.tenantId!
+
+  const parsed = SalesSummarySchema.safeParse(req.query)
+  if (!parsed.success) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid query parameters', 400)
+  }
+
+  const range = boundedDateRange({ from: parsed.data.from, to: parsed.data.to }, 30)
+  const summary = await getSalesSummary(tenantId, range, parsed.data.groupBy)
+
+  res.json({
+    success: true,
+    data: {
+      groupBy: parsed.data.groupBy,
+      from: range.from.toISOString(),
+      to: range.to.toISOString(),
+      buckets: summary.buckets,
+      totalUgx: summary.totalUgx,
+      count: summary.count,
+    },
+  })
 })
 
 export const handleCancelSale = asyncHandler(async (req: Request, res: Response) => {

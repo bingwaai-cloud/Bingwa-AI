@@ -3,6 +3,7 @@ import { logger } from '../utils/logger.js'
 import { normalizePhone } from '../utils/phone.js'
 import { withTenant } from '../db.js'
 import type { Prisma } from '@prisma/client'
+import { findSales, type SaleFilters, type SalePage } from '../repositories/salesRepository.js'
 import {
   createCustomer,
   findCustomerById,
@@ -174,4 +175,18 @@ export async function linkCustomerToSale(
   }
 
   return customer.id
+}
+
+export async function listCustomerPurchases(
+  tenantId: string,
+  customerId: string,
+  filters: Omit<SaleFilters, 'customerId' | 'itemId'>
+): Promise<SalePage> {
+  return withTenant(tenantId, async (tx) => {
+    const customer = await findCustomerById(tx, tenantId, customerId)
+    if (!customer) {
+      throw new AppError(ErrorCodes.CUSTOMER_NOT_FOUND, 'Customer not found', 404)
+    }
+    return findSales(tx, tenantId, { ...filters, customerId })
+  })
 }

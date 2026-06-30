@@ -3,6 +3,7 @@ import {
   handleCreatePurchase,
   handleGetPurchase,
   handleListPurchases,
+  handlePurchasesSummary,
 } from '../controllers/purchasesController.js'
 
 /**
@@ -13,6 +14,9 @@ export const purchasesRouter = Router()
 
 // GET  /api/v1/purchases         — paginated list of purchases
 purchasesRouter.get('/', handleListPurchases)
+
+// GET  /api/v1/purchases/summary - grouped purchase totals
+purchasesRouter.get('/summary', handlePurchasesSummary)
 
 // POST /api/v1/purchases         — record a new purchase (restocking)
 purchasesRouter.post('/', handleCreatePurchase)

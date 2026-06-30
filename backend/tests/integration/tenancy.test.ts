@@ -44,9 +44,9 @@ describe('Cross-tenant isolation (RLS)', () => {
   // -- Repository level --------------------------------------------------------
 
   it('repository: tenant A sees only its own items', async () => {
-    const items = await asTenant(A.tenantId, (tx) => findAllItems(tx, A.tenantId))
-    expect(items).toHaveLength(1)
-    expect(items[0]?.name).toBe('Sugar')
+    const page = await asTenant(A.tenantId, (tx) => findAllItems(tx, A.tenantId))
+    expect(page.items).toHaveLength(1)
+    expect(page.items[0]?.name).toBe('Sugar')
   })
 
   it("repository: tenant A cannot read tenant B's item by id (RLS hides it)", async () => {

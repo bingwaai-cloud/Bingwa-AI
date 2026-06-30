@@ -1,4 +1,4 @@
-import type { Prisma, Sale, SaleLineItem as PrismaSaleLineItem } from '@prisma/client'
+import { Prisma, type Sale, type SaleLineItem as PrismaSaleLineItem } from '@prisma/client'
 
 /**
  * Sales live in the public schema, keyed by tenant_id (row-level multi-tenancy).
@@ -130,6 +130,7 @@ export interface SaleFilters {
   from?: Date
   to?: Date
   itemId?: string
+  customerId?: string
   page?: number
   perPage?: number
 }
@@ -173,6 +174,7 @@ export async function findSales(
           ],
         }
       : {}),
+    ...(filters.customerId ? { customerId: filters.customerId } : {}),
   }
 
   const sales = await tx.sale.findMany({
@@ -278,3 +280,60 @@ export async function createReceiptForSale(
 }
 
 export { insertAuditLog, type AuditLogEntry } from '../utils/audit.js'
+
+export type SummaryGroupBy = 'day' | 'week' | 'month'
+
+export interface SummaryBucket {
+  periodStart: Date
+  totalUgx: number
+  count: number
+}
+
+export interface SalesSummary {
+  buckets: SummaryBucket[]
+  totalUgx: number
+  count: number
+}
+
+function summaryBucket(groupBy: SummaryGroupBy): Prisma.Sql {
+  if (groupBy === 'month') return Prisma.sql`'month'`
+  if (groupBy === 'week') return Prisma.sql`'week'`
+  return Prisma.sql`'day'`
+}
+
+function mapSummaryRows(rows: Array<{ periodStart: Date; totalUgx: bigint | number; count: bigint | number }>): SummaryBucket[] {
+  return rows.map((row) => ({
+    periodStart: row.periodStart,
+    totalUgx: Number(row.totalUgx),
+    count: Number(row.count),
+  }))
+}
+
+export async function getSalesSummary(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  from: Date,
+  to: Date,
+  groupBy: SummaryGroupBy
+): Promise<SalesSummary> {
+  const bucket = summaryBucket(groupBy)
+  const rows = await tx.$queryRaw<Array<{ periodStart: Date; totalUgx: bigint; count: bigint }>>`
+    SELECT
+      (date_trunc(${bucket}, s.created_at AT TIME ZONE 'Africa/Kampala') AT TIME ZONE 'Africa/Kampala') AS "periodStart",
+      COALESCE(SUM(s.total_price), 0)::bigint AS "totalUgx",
+      COUNT(*)::bigint AS count
+    FROM public.sales s
+    WHERE s.tenant_id = ${tenantId}::uuid
+      AND s.deleted_at IS NULL
+      AND s.created_at >= ${from}
+      AND s.created_at <= ${to}
+    GROUP BY 1
+    ORDER BY 1 ASC
+  `
+  const buckets = mapSummaryRows(rows)
+  return {
+    buckets,
+    totalUgx: buckets.reduce((sum, bucketRow) => sum + bucketRow.totalUgx, 0),
+    count: buckets.reduce((sum, bucketRow) => sum + bucketRow.count, 0),
+  }
+}

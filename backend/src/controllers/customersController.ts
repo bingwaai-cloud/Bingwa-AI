@@ -2,6 +2,7 @@ import { type Request, type Response } from 'express'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/asyncHandler.js'
 import { AppError, ErrorCodes } from '../utils/AppError.js'
+import { DateRangeQuerySchema, PaginationSchema, boundedDateRange } from '../utils/queryParams.js'
 import {
   addCustomer,
   getCustomerById,
@@ -9,6 +10,7 @@ import {
   getCustomerSegments,
   editCustomer,
   removeCustomer,
+  listCustomerPurchases,
 } from '../services/customersService.js'
 
 // ── Validation schemas ────────────────────────────────────────────────────────
@@ -32,6 +34,8 @@ const ListCustomersSchema = z.object({
   page:    z.coerce.number().int().positive().default(1),
   perPage: z.coerce.number().int().positive().max(100).default(20),
 })
+
+const CustomerPurchasesSchema = PaginationSchema.merge(DateRangeQuerySchema)
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
@@ -71,6 +75,38 @@ export const handleGetCustomer = asyncHandler(async (req: Request, res: Response
   const customer = await getCustomerById(tenantId, id)
 
   res.json({ success: true, data: customer })
+})
+
+export const handleListCustomerPurchases = asyncHandler(async (req: Request, res: Response) => {
+  const tenantId = req.tenantId!
+  const { id } = req.params
+
+  if (!id) throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Customer ID required', 400)
+  const idParsed = z.string().uuid().safeParse(id)
+  if (!idParsed.success) throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid customer ID', 400)
+
+  const parsed = CustomerPurchasesSchema.safeParse(req.query)
+  if (!parsed.success) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid query parameters', 400)
+  }
+
+  const range = boundedDateRange({ from: parsed.data.from, to: parsed.data.to }, 90)
+  const result = await listCustomerPurchases(tenantId, idParsed.data, {
+    from: range.from,
+    to: range.to,
+    page: parsed.data.page,
+    perPage: parsed.data.perPage,
+  })
+
+  res.json({
+    success: true,
+    data: result.sales,
+    meta: {
+      total: result.total,
+      page: result.page,
+      perPage: result.perPage,
+    },
+  })
 })
 
 export const handleListCustomers = asyncHandler(async (req: Request, res: Response) => {

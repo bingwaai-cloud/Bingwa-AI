@@ -6,10 +6,13 @@ import {
   createPurchase,
   findPurchaseById,
   findPurchases,
+  getPurchasesSummary as getPurchasesSummaryRepo,
   type CreatePurchaseInput,
   type PurchaseFilters,
   type PurchasePage,
   type Purchase,
+  type PurchasesSummary,
+  type SummaryGroupBy,
 } from '../repositories/purchasesRepository.js'
 import {
   findItemById,
@@ -135,4 +138,12 @@ export async function getPurchaseById(tenantId: string, purchaseId: string): Pro
 
 export async function listPurchases(tenantId: string, filters: PurchaseFilters): Promise<PurchasePage> {
   return withTenant(tenantId, (tx) => findPurchases(tx, tenantId, filters))
+}
+
+export async function getPurchasesSummary(
+  tenantId: string,
+  range: { from: Date; to: Date },
+  groupBy: SummaryGroupBy
+): Promise<PurchasesSummary> {
+  return withTenant(tenantId, (tx) => getPurchasesSummaryRepo(tx, tenantId, range.from, range.to, groupBy))
 }

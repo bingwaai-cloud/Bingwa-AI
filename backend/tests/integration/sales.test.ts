@@ -7,6 +7,7 @@ import { createApp } from '../../src/app.js'
 import { db, withTenant } from '../../src/db.js'
 import { createTestTenant, makeToken, seedItem, cleanupTenant, type TestTenant } from '../fixtures/tenant.js'
 import { truncateAuditLog } from '../fixtures/audit.js'
+import { getSalesSummary } from '../../src/services/salesService.js'
 
 const TEST_TENANT_ID = 'a1b2c3d4-0000-0000-0000-000000000001'
 const TEST_ITEM_ID = 'a1b2c3d4-0000-0000-0000-000000000003'
@@ -14,6 +15,7 @@ const SOAP_ITEM_ID = 'a1b2c3d4-0000-0000-0000-000000000013'
 const RICE_ITEM_ID = 'a1b2c3d4-0000-0000-0000-000000000023'
 const INITIAL_QTY = 20
 const LOW_THRESHOLD = 5
+const OTHER_TENANT_ID = 'a1b2c3d4-0000-0000-0000-000000000101'
 
 const sugarLine = (overrides: Record<string, unknown> = {}) => ({
   itemId: TEST_ITEM_ID,
@@ -39,6 +41,10 @@ async function resetItemStock(): Promise<void> {
     await tx.item.update({ where: { id: SOAP_ITEM_ID }, data: { qtyInStock: INITIAL_QTY, deletedAt: null } })
     await tx.item.update({ where: { id: RICE_ITEM_ID }, data: { qtyInStock: INITIAL_QTY, deletedAt: null } })
   })
+  await withTenant(OTHER_TENANT_ID, async (tx) => {
+    await tx.saleLineItem.deleteMany({})
+    await tx.sale.deleteMany({})
+  }).catch(() => undefined)
 }
 
 describe('Sales API', () => {
@@ -50,8 +56,10 @@ describe('Sales API', () => {
     app = createApp()
     await truncateAuditLog()
     await cleanupTenant(TEST_TENANT_ID)
+    await cleanupTenant(OTHER_TENANT_ID)
     tenant = await createTestTenant({ id: TEST_TENANT_ID, ownerPhone: '+256700000099' })
     token = makeToken(tenant)
+    await createTestTenant({ id: OTHER_TENANT_ID, ownerPhone: '+256700000199' })
     await seedItem(TEST_TENANT_ID, {
       id: TEST_ITEM_ID,
       name: 'Sugar',
@@ -81,6 +89,7 @@ describe('Sales API', () => {
   afterAll(async () => {
     await truncateAuditLog()
     await cleanupTenant(TEST_TENANT_ID)
+    await cleanupTenant(OTHER_TENANT_ID)
     await db.$disconnect()
   })
 
@@ -322,6 +331,79 @@ describe('Sales API', () => {
     it('returns 401 without token', async () => {
       const res = await request(app).get('/api/v1/sales')
       expect(res.status).toBe(401)
+    })
+  })
+
+  describe('GET /api/v1/sales/summary', () => {
+    it('buckets daily summaries in Africa/Kampala for near-midnight EAT sales', async () => {
+      await withTenant(TEST_TENANT_ID, async (tx) => {
+        await tx.sale.create({
+          data: {
+            tenantId: TEST_TENANT_ID,
+            itemName: 'Night Sugar',
+            qty: 1,
+            unitPrice: 6500,
+            totalPrice: 6500,
+            source: 'api',
+            createdAt: new Date('2026-06-29T22:15:00.000Z'),
+          },
+        })
+        await tx.sale.create({
+          data: {
+            tenantId: TEST_TENANT_ID,
+            itemName: 'Late Soap',
+            qty: 1,
+            unitPrice: 13000,
+            totalPrice: 13000,
+            source: 'api',
+            createdAt: new Date('2026-06-30T20:30:00.000Z'),
+          },
+        })
+      })
+
+      const res = await request(app)
+        .get('/api/v1/sales/summary?from=2026-06-29T21:00:00.000Z&to=2026-06-30T20:59:59.999Z&groupBy=day')
+        .set('Authorization', `Bearer ${token}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.data.buckets).toHaveLength(1)
+      expect(res.body.data.buckets[0]).toEqual(expect.objectContaining({
+        periodStart: '2026-06-29T21:00:00.000Z',
+        totalUgx: 19500,
+        count: 2,
+      }))
+      expect(res.body.data.totalUgx).toBe(19500)
+      expect(res.body.data.count).toBe(2)
+    })
+
+    it('rejects summary ranges longer than 90 days', async () => {
+      const res = await request(app)
+        .get('/api/v1/sales/summary?from=2026-01-01T00:00:00.000Z&to=2026-05-01T00:00:00.000Z&groupBy=day')
+        .set('Authorization', `Bearer ${token}`)
+
+      expect(res.status).toBe(400)
+      expect(res.body.error.code).toBe('VALIDATION_ERROR')
+    })
+
+    it('does not include another tenant in sales summaries through API or repository', async () => {
+      await withTenant(TEST_TENANT_ID, (tx) => tx.sale.create({
+        data: { tenantId: TEST_TENANT_ID, itemName: 'Tenant Sale', qty: 1, unitPrice: 7000, totalPrice: 7000, source: 'api', createdAt: new Date('2026-06-30T08:00:00.000Z') },
+      }))
+      await withTenant(OTHER_TENANT_ID, (tx) => tx.sale.create({
+        data: { tenantId: OTHER_TENANT_ID, itemName: 'Other Sale', qty: 1, unitPrice: 999999, totalPrice: 999999, source: 'api', createdAt: new Date('2026-06-30T08:00:00.000Z') },
+      }))
+
+      const params = { from: new Date('2026-06-29T21:00:00.000Z'), to: new Date('2026-06-30T20:59:59.999Z') }
+      const apiRes = await request(app)
+        .get('/api/v1/sales/summary?from=2026-06-29T21:00:00.000Z&to=2026-06-30T20:59:59.999Z&groupBy=day')
+        .set('Authorization', `Bearer ${token}`)
+      const repoRes = await getSalesSummary(TEST_TENANT_ID, params, 'day')
+
+      expect(apiRes.status).toBe(200)
+      expect(apiRes.body.data.totalUgx).toBe(7000)
+      expect(apiRes.body.data.count).toBe(1)
+      expect(repoRes.totalUgx).toBe(7000)
+      expect(repoRes.count).toBe(1)
     })
   })
 

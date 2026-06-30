@@ -8,6 +8,7 @@ import {
   findSaleById,
   findSales,
   getDailySummary,
+  getSalesSummary as getSalesSummaryRepo,
   insertPriceHistory,
   softDeleteSale,
   insertAuditLog,
@@ -15,6 +16,8 @@ import {
   type CreateSaleInput,
   type SaleFilters,
   type SalePage,
+  type SalesSummary,
+  type SummaryGroupBy,
   type SaleLineItem,
   type SaleWithLines,
 } from '../repositories/salesRepository.js'
@@ -413,4 +416,12 @@ export async function cancelSale(
   return withTenant(tenantId, (tx) =>
     cancelSaleInTransaction(tx, tenantId, saleId, recordedBy, actorUserId)
   )
+}
+
+export async function getSalesSummary(
+  tenantId: string,
+  range: { from: Date; to: Date },
+  groupBy: SummaryGroupBy
+): Promise<SalesSummary> {
+  return withTenant(tenantId, (tx) => getSalesSummaryRepo(tx, tenantId, range.from, range.to, groupBy))
 }

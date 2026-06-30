@@ -2,6 +2,7 @@ import { type Request, type Response } from 'express'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/asyncHandler.js'
 import { AppError, ErrorCodes } from '../utils/AppError.js'
+import { PaginationSchema, SortOrderSchema } from '../utils/queryParams.js'
 import {
   listItems,
   getItemById,
@@ -39,6 +40,12 @@ const StockAdjustSchema = z.object({
   reason: z.string().min(1).max(255).default('correction'),
 })
 
+const ListItemsSchema = PaginationSchema.extend({
+  search: z.string().trim().min(1).max(255).optional(),
+  sortBy: z.enum(['name', 'qtyInStock', 'createdAt', 'updatedAt']).default('name'),
+  sortOrder: SortOrderSchema,
+})
+
 // ── WhatsApp formatter ────────────────────────────────────────────────────────
 
 function formatAdjustWhatsApp(result: StockAdjustResult, itemName: string): string {
@@ -60,13 +67,26 @@ function formatAdjustWhatsApp(result: StockAdjustResult, itemName: string): stri
 export const handleListItems = asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenantId!
 
-  const result = await listItems(tenantId)
+  const parsed = ListItemsSchema.safeParse(req.query)
+  if (!parsed.success) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid query parameters', 400)
+  }
+
+  const result = await listItems(tenantId, {
+    page: parsed.data.page,
+    perPage: parsed.data.perPage,
+    search: parsed.data.search,
+    sortBy: parsed.data.sortBy,
+    sortOrder: parsed.data.sortOrder,
+  })
 
   res.json({
     success: true,
     data: result.items,
     meta: {
       total: result.total,
+      page: result.page,
+      perPage: result.perPage,
       lowStockCount: result.lowStockCount,
     },
   })

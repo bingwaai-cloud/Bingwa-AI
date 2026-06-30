@@ -1,4 +1,4 @@
-import type { Prisma, Item } from '@prisma/client'
+import { Prisma, type Item } from '@prisma/client'
 
 /**
  * Items live in the public schema, keyed by tenant_id (row-level multi-tenancy).
@@ -7,6 +7,26 @@ import type { Prisma, Item } from '@prisma/client'
  * application layer (defence in depth, per .claude/rules/multi-tenant.md).
  */
 export type { Item }
+
+export type InventorySortBy = 'name' | 'qtyInStock' | 'createdAt' | 'updatedAt'
+export type SortOrder = 'asc' | 'desc'
+export type ItemWithLastSold = Item & { lastSoldAt: Date | null }
+
+export interface ItemListFilters {
+  page?: number
+  perPage?: number
+  search?: string
+  sortBy?: InventorySortBy
+  sortOrder?: SortOrder
+}
+
+export interface ItemPage {
+  items: ItemWithLastSold[]
+  total: number
+  page: number
+  perPage: number
+  lowStockCount: number
+}
 
 export interface CreateItemInput {
   tenantId: string
@@ -20,14 +40,107 @@ export interface CreateItemInput {
   typicalSellPrice?: number | null
 }
 
+function itemOrderBy(sortBy: InventorySortBy, sortOrder: SortOrder): Prisma.Sql {
+  const direction = sortOrder === 'desc' ? Prisma.sql`DESC` : Prisma.sql`ASC`
+  const column = sortBy === 'qtyInStock'
+    ? Prisma.sql`i.qty_in_stock`
+    : sortBy === 'createdAt'
+      ? Prisma.sql`i.created_at`
+      : sortBy === 'updatedAt'
+        ? Prisma.sql`i.updated_at`
+        : Prisma.sql`i.name_normalized`
+  return Prisma.sql`${column} ${direction}, i.id ASC`
+}
+
+function itemSearchClause(search: string | undefined): Prisma.Sql {
+  const lexical = search?.toLowerCase().trim()
+  if (!lexical) return Prisma.sql``
+  return Prisma.sql`
+    AND (
+      i.name_normalized ILIKE ${lexical}
+      OR EXISTS (
+        SELECT 1 FROM unnest(i.aliases) AS alias
+        WHERE alias ILIKE ${lexical}
+      )
+      OR similarity(i.name_normalized, ${lexical}) >= 0.45
+    )
+  `
+}
+
 export async function findAllItems(
   tx: Prisma.TransactionClient,
-  tenantId: string
-): Promise<Item[]> {
-  return tx.item.findMany({
-    where: { tenantId, deletedAt: null },
-    orderBy: { nameNormalized: 'asc' },
-  })
+  tenantId: string,
+  filters: ItemListFilters = {}
+): Promise<ItemPage> {
+  const page = Math.max(1, filters.page ?? 1)
+  const perPage = Math.min(100, Math.max(1, filters.perPage ?? 20))
+  const offset = (page - 1) * perPage
+  const sortBy = filters.sortBy ?? 'name'
+  const sortOrder = filters.sortOrder ?? 'asc'
+  const searchClause = itemSearchClause(filters.search)
+  const orderBy = itemOrderBy(sortBy, sortOrder)
+
+  const rows = await tx.$queryRaw<ItemWithLastSold[]>`
+    SELECT
+      i.id,
+      i.tenant_id AS "tenantId",
+      i.name,
+      i.name_normalized AS "nameNormalized",
+      i.aliases,
+      i.unit,
+      i.qty_in_stock AS "qtyInStock",
+      i.low_stock_threshold AS "lowStockThreshold",
+      i.typical_buy_price AS "typicalBuyPrice",
+      i.typical_sell_price AS "typicalSellPrice",
+      i.created_at AS "createdAt",
+      i.updated_at AS "updatedAt",
+      i.deleted_at AS "deletedAt",
+      (
+        SELECT MAX(sold_at) FROM (
+          SELECT sli.created_at AS sold_at
+          FROM public.sale_line_items sli
+          WHERE sli.tenant_id = ${tenantId}::uuid
+            AND sli.item_id = i.id
+            AND sli.deleted_at IS NULL
+          UNION ALL
+          SELECT s.created_at AS sold_at
+          FROM public.sales s
+          WHERE s.tenant_id = ${tenantId}::uuid
+            AND s.item_id = i.id
+            AND s.deleted_at IS NULL
+        ) sold
+      ) AS "lastSoldAt"
+    FROM public.items i
+    WHERE i.tenant_id = ${tenantId}::uuid
+      AND i.deleted_at IS NULL
+      ${searchClause}
+    ORDER BY ${orderBy}
+    LIMIT ${perPage} OFFSET ${offset}
+  `
+
+  const countRows = await tx.$queryRaw<Array<{ total: bigint }>>`
+    SELECT COUNT(*) AS total
+    FROM public.items i
+    WHERE i.tenant_id = ${tenantId}::uuid
+      AND i.deleted_at IS NULL
+      ${searchClause}
+  `
+
+  const lowStockRows = await tx.$queryRaw<Array<{ total: bigint }>>`
+    SELECT COUNT(*) AS total
+    FROM public.items i
+    WHERE i.tenant_id = ${tenantId}::uuid
+      AND i.deleted_at IS NULL
+      AND i.qty_in_stock <= i.low_stock_threshold
+  `
+
+  return {
+    items: rows,
+    total: Number(countRows[0]?.total ?? 0),
+    page,
+    perPage,
+    lowStockCount: Number(lowStockRows[0]?.total ?? 0),
+  }
 }
 
 export async function findItemById(

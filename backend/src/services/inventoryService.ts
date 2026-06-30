@@ -11,6 +11,8 @@ import {
   adjustItemStock,
   insertAuditLog,
   type Item,
+  type ItemListFilters,
+  type ItemWithLastSold,
   type CreateItemInput,
   type UpdateItemInput,
 } from '../repositories/itemRepository.js'
@@ -44,15 +46,15 @@ export interface StockAdjustResult {
 }
 
 export interface InventoryPage {
-  items: Item[]
+  items: ItemWithLastSold[]
   total: number
+  page: number
+  perPage: number
   lowStockCount: number
 }
 
-export async function listItems(tenantId: string): Promise<InventoryPage> {
-  const items = await withTenant(tenantId, (tx) => findAllItems(tx, tenantId))
-  const lowStockCount = items.filter((i) => i.qtyInStock <= i.lowStockThreshold).length
-  return { items, total: items.length, lowStockCount }
+export async function listItems(tenantId: string, filters: ItemListFilters = {}): Promise<InventoryPage> {
+  return withTenant(tenantId, (tx) => findAllItems(tx, tenantId, filters))
 }
 
 export async function getItemById(tenantId: string, itemId: string): Promise<Item> {

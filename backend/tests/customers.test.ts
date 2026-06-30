@@ -8,11 +8,14 @@
 import request from 'supertest'
 import type { Express } from 'express'
 import { createApp } from '../src/app.js'
-import { db } from '../src/db.js'
-import { createTestTenant, makeToken, cleanupTenant, type TestTenant } from './fixtures/tenant.js'
+import { db, withTenant } from '../src/db.js'
+import { createTestTenant, makeToken, cleanupTenant, seedItem, type TestTenant } from './fixtures/tenant.js'
+import { listCustomerPurchases } from '../src/services/customersService.js'
 
 const TEST_TENANT_ID = 'f6a7b8c9-0000-0000-0000-000000000001'
 const TEST_PHONE     = '+256770000099'
+const OTHER_TENANT_ID = 'f6a7b8c9-0000-0000-0000-000000000101'
+const OTHER_PHONE = '+256770000199'
 
 describe('Customers / Marketing API', () => {
   let app: Express
@@ -22,16 +25,19 @@ describe('Customers / Marketing API', () => {
   beforeAll(async () => {
     app = createApp()
     await cleanupTenant(TEST_TENANT_ID)
+    await cleanupTenant(OTHER_TENANT_ID)
     tenant = await createTestTenant({
       id: TEST_TENANT_ID,
       ownerPhone: TEST_PHONE,
       businessName: 'Test Customers Shop',
     })
     token = makeToken(tenant)
+    await createTestTenant({ id: OTHER_TENANT_ID, ownerPhone: OTHER_PHONE, businessName: 'Other Customers Shop' })
   })
 
   afterAll(async () => {
     await cleanupTenant(TEST_TENANT_ID)
+    await cleanupTenant(OTHER_TENANT_ID)
     await db.$disconnect()
   })
 
@@ -139,7 +145,61 @@ describe('Customers / Marketing API', () => {
     })
   })
 
-  // ── GET /api/v1/customers/segments ───────────────────────────────────────────
+  describe('GET /api/v1/customers/:id/purchases', () => {
+    it('returns paginated purchase history for one customer', async () => {
+      const item = await seedItem(TEST_TENANT_ID, { name: 'History Sugar', unit: 'kg', qtyInStock: 20 })
+      const customer = await withTenant(TEST_TENANT_ID, (tx) => tx.customer.create({
+        data: { tenantId: TEST_TENANT_ID, phone: '+256772222111', name: 'History Customer' },
+      }))
+      await withTenant(TEST_TENANT_ID, async (tx) => {
+        const sale = await tx.sale.create({
+          data: { tenantId: TEST_TENANT_ID, customerId: customer.id, itemId: item.id, itemName: 'History Sugar', qty: 2, unitPrice: 3000, totalPrice: 6000, source: 'api' },
+        })
+        await tx.saleLineItem.create({
+          data: { tenantId: TEST_TENANT_ID, saleId: sale.id, itemId: item.id, itemName: 'History Sugar', qty: 2, unit: 'kg', unitPrice: 3000, totalPrice: 6000 },
+        })
+        await tx.sale.create({
+          data: { tenantId: TEST_TENANT_ID, customerId: customer.id, itemName: 'History Soap', qty: 1, unitPrice: 2500, totalPrice: 2500, source: 'api' },
+        })
+      })
+
+      const res = await request(app)
+        .get(`/api/v1/customers/${customer.id}/purchases?page=1&perPage=1`)
+        .set('Authorization', `Bearer ${token}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.meta).toEqual(expect.objectContaining({ total: 2, page: 1, perPage: 1 }))
+      expect(res.body.data).toHaveLength(1)
+    })
+
+    it('rejects purchase-history ranges longer than 90 days', async () => {
+      const customer = await withTenant(TEST_TENANT_ID, (tx) => tx.customer.create({
+        data: { tenantId: TEST_TENANT_ID, phone: '+256772222112', name: 'Long Range Customer' },
+      }))
+
+      const res = await request(app)
+        .get(`/api/v1/customers/${customer.id}/purchases?from=2026-01-01T00:00:00.000Z&to=2026-05-01T00:00:00.000Z`)
+        .set('Authorization', `Bearer ${token}`)
+
+      expect(res.status).toBe(400)
+      expect(res.body.error.code).toBe('VALIDATION_ERROR')
+    })
+
+    it('denies cross-tenant customer purchase history through API and repository', async () => {
+      const otherCustomer = await withTenant(OTHER_TENANT_ID, (tx) => tx.customer.create({
+        data: { tenantId: OTHER_TENANT_ID, phone: '+256772222199', name: 'Other History Customer' },
+      }))
+
+      const apiRes = await request(app)
+        .get(`/api/v1/customers/${otherCustomer.id}/purchases`)
+        .set('Authorization', `Bearer ${token}`)
+
+      expect(apiRes.status).toBe(404)
+      await expect(listCustomerPurchases(TEST_TENANT_ID, otherCustomer.id, { page: 1, perPage: 20 })).rejects.toMatchObject({ code: 'CUSTOMER_NOT_FOUND' })
+    })
+  })
+
+  // -- GET /api/v1/customers/segments ───────────────────────────────────────────
 
   describe('GET /api/v1/customers/segments', () => {
     it('returns frequent, occasional, and lapsed segments', async () => {

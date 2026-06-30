@@ -2,10 +2,12 @@ import { type Request, type Response } from 'express'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/asyncHandler.js'
 import { AppError, ErrorCodes } from '../utils/AppError.js'
+import { DateRangeQuerySchema, SummaryGroupBySchema, boundedDateRange } from '../utils/queryParams.js'
 import {
   createPurchaseRecord,
   getPurchaseById,
   listPurchases,
+  getPurchasesSummary,
 } from '../services/purchasesService.js'
 
 // ── Validation schemas ────────────────────────────────────────────────────────
@@ -28,6 +30,10 @@ const ListPurchasesSchema = z.object({
   itemId: z.string().uuid().optional(),
   page: z.coerce.number().int().positive().default(1),
   perPage: z.coerce.number().int().positive().max(100).default(20),
+})
+
+const PurchasesSummarySchema = DateRangeQuerySchema.extend({
+  groupBy: SummaryGroupBySchema,
 })
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
@@ -96,6 +102,30 @@ export const handleListPurchases = asyncHandler(async (req: Request, res: Respon
       total: result.total,
       page: result.page,
       perPage: result.perPage,
+    },
+  })
+})
+
+export const handlePurchasesSummary = asyncHandler(async (req: Request, res: Response) => {
+  const tenantId = req.tenantId!
+
+  const parsed = PurchasesSummarySchema.safeParse(req.query)
+  if (!parsed.success) {
+    throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Invalid query parameters', 400)
+  }
+
+  const range = boundedDateRange({ from: parsed.data.from, to: parsed.data.to }, 30)
+  const summary = await getPurchasesSummary(tenantId, range, parsed.data.groupBy)
+
+  res.json({
+    success: true,
+    data: {
+      groupBy: parsed.data.groupBy,
+      from: range.from.toISOString(),
+      to: range.to.toISOString(),
+      buckets: summary.buckets,
+      totalUgx: summary.totalUgx,
+      count: summary.count,
     },
   })
 })

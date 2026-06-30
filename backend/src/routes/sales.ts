@@ -4,6 +4,7 @@ import {
   handleGetSale,
   handleListSales,
   handleTodaySummary,
+  handleSalesSummary,
   handleCancelSale,
 } from '../controllers/salesController.js'
 
@@ -18,6 +19,9 @@ salesRouter.get('/', handleListSales)
 
 // GET  /api/v1/sales/summary/today — today's revenue + sale count
 salesRouter.get('/summary/today', handleTodaySummary)
+
+// GET  /api/v1/sales/summary       - grouped sales totals
+salesRouter.get('/summary', handleSalesSummary)
 
 // POST /api/v1/sales              — record a new sale
 salesRouter.post('/', handleCreateSale)

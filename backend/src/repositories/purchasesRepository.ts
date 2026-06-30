@@ -1,4 +1,4 @@
-import type { Prisma, Purchase } from '@prisma/client'
+import { Prisma, type Purchase } from '@prisma/client'
 
 /**
  * Purchases (restocking) live in the public schema, keyed by tenant_id.
@@ -102,4 +102,61 @@ export async function getDailyPurchaseSummary(
     _count: { _all: true },
   })
   return { totalSpend: agg._sum.totalPrice ?? 0, purchaseCount: agg._count._all }
+}
+
+export type SummaryGroupBy = 'day' | 'week' | 'month'
+
+export interface SummaryBucket {
+  periodStart: Date
+  totalUgx: number
+  count: number
+}
+
+export interface PurchasesSummary {
+  buckets: SummaryBucket[]
+  totalUgx: number
+  count: number
+}
+
+function summaryBucket(groupBy: SummaryGroupBy): Prisma.Sql {
+  if (groupBy === 'month') return Prisma.sql`'month'`
+  if (groupBy === 'week') return Prisma.sql`'week'`
+  return Prisma.sql`'day'`
+}
+
+function mapSummaryRows(rows: Array<{ periodStart: Date; totalUgx: bigint | number; count: bigint | number }>): SummaryBucket[] {
+  return rows.map((row) => ({
+    periodStart: row.periodStart,
+    totalUgx: Number(row.totalUgx),
+    count: Number(row.count),
+  }))
+}
+
+export async function getPurchasesSummary(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  from: Date,
+  to: Date,
+  groupBy: SummaryGroupBy
+): Promise<PurchasesSummary> {
+  const bucket = summaryBucket(groupBy)
+  const rows = await tx.$queryRaw<Array<{ periodStart: Date; totalUgx: bigint; count: bigint }>>`
+    SELECT
+      (date_trunc(${bucket}, p.created_at AT TIME ZONE 'Africa/Kampala') AT TIME ZONE 'Africa/Kampala') AS "periodStart",
+      COALESCE(SUM(p.total_price), 0)::bigint AS "totalUgx",
+      COUNT(*)::bigint AS count
+    FROM public.purchases p
+    WHERE p.tenant_id = ${tenantId}::uuid
+      AND p.deleted_at IS NULL
+      AND p.created_at >= ${from}
+      AND p.created_at <= ${to}
+    GROUP BY 1
+    ORDER BY 1 ASC
+  `
+  const buckets = mapSummaryRows(rows)
+  return {
+    buckets,
+    totalUgx: buckets.reduce((sum, bucketRow) => sum + bucketRow.totalUgx, 0),
+    count: buckets.reduce((sum, bucketRow) => sum + bucketRow.count, 0),
+  }
 }

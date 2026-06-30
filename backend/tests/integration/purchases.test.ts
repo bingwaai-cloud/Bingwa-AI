@@ -10,11 +10,13 @@ import type { Express } from 'express'
 import { createApp } from '../../src/app.js'
 import { db, withTenant } from '../../src/db.js'
 import { createTestTenant, makeToken, seedItem, cleanupTenant, type TestTenant } from '../fixtures/tenant.js'
+import { getPurchasesSummary } from '../../src/services/purchasesService.js'
 
 const TEST_TENANT_ID  = 'd4e5f6a7-0000-0000-0000-000000000001'
 const TEST_ITEM_ID    = 'd4e5f6a7-0000-0000-0000-000000000003'
 const TEST_SUPPLIER_ID = 'd4e5f6a7-0000-0000-0000-000000000004'
 const INITIAL_QTY     = 10
+const OTHER_TENANT_ID = 'd4e5f6a7-0000-0000-0000-000000000101'
 
 async function resetState(): Promise<void> {
   await withTenant(TEST_TENANT_ID, async (tx) => {
@@ -26,6 +28,9 @@ async function resetState(): Promise<void> {
       data: { qtyInStock: INITIAL_QTY },
     })
   })
+  await withTenant(OTHER_TENANT_ID, async (tx) => {
+    await tx.purchase.deleteMany({})
+  }).catch(() => undefined)
 }
 
 describe('Purchases API', () => {
@@ -36,8 +41,10 @@ describe('Purchases API', () => {
   beforeAll(async () => {
     app = createApp()
     await cleanupTenant(TEST_TENANT_ID)
+    await cleanupTenant(OTHER_TENANT_ID)
     tenant = await createTestTenant({ id: TEST_TENANT_ID, ownerPhone: '+256700000066' })
     token = makeToken(tenant)
+    await createTestTenant({ id: OTHER_TENANT_ID, ownerPhone: '+256700000166' })
     await seedItem(TEST_TENANT_ID, {
       id: TEST_ITEM_ID,
       name: 'Maize Flour',
@@ -68,6 +75,7 @@ describe('Purchases API', () => {
 
   afterAll(async () => {
     await cleanupTenant(TEST_TENANT_ID)
+    await cleanupTenant(OTHER_TENANT_ID)
     await db.$disconnect()
   })
 
@@ -253,7 +261,80 @@ describe('Purchases API', () => {
     })
   })
 
-  // ── GET /api/v1/purchases/:id ─────────────────────────────────────────────
+  describe('GET /api/v1/purchases/summary', () => {
+    it('buckets daily summaries in Africa/Kampala for near-midnight EAT purchases', async () => {
+      await withTenant(TEST_TENANT_ID, async (tx) => {
+        await tx.purchase.create({
+          data: {
+            tenantId: TEST_TENANT_ID,
+            itemName: 'Night Maize',
+            qty: 1,
+            unitPrice: 45000,
+            totalPrice: 45000,
+            source: 'api',
+            createdAt: new Date('2026-06-29T22:15:00.000Z'),
+          },
+        })
+        await tx.purchase.create({
+          data: {
+            tenantId: TEST_TENANT_ID,
+            itemName: 'Late Rice',
+            qty: 1,
+            unitPrice: 90000,
+            totalPrice: 90000,
+            source: 'api',
+            createdAt: new Date('2026-06-30T20:30:00.000Z'),
+          },
+        })
+      })
+
+      const res = await request(app)
+        .get('/api/v1/purchases/summary?from=2026-06-29T21:00:00.000Z&to=2026-06-30T20:59:59.999Z&groupBy=day')
+        .set('Authorization', `Bearer ${token}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.data.buckets).toHaveLength(1)
+      expect(res.body.data.buckets[0]).toEqual(expect.objectContaining({
+        periodStart: '2026-06-29T21:00:00.000Z',
+        totalUgx: 135000,
+        count: 2,
+      }))
+      expect(res.body.data.totalUgx).toBe(135000)
+      expect(res.body.data.count).toBe(2)
+    })
+
+    it('rejects summary ranges longer than 90 days', async () => {
+      const res = await request(app)
+        .get('/api/v1/purchases/summary?from=2026-01-01T00:00:00.000Z&to=2026-05-01T00:00:00.000Z&groupBy=day')
+        .set('Authorization', `Bearer ${token}`)
+
+      expect(res.status).toBe(400)
+      expect(res.body.error.code).toBe('VALIDATION_ERROR')
+    })
+
+    it('does not include another tenant in purchase summaries through API or repository', async () => {
+      await withTenant(TEST_TENANT_ID, (tx) => tx.purchase.create({
+        data: { tenantId: TEST_TENANT_ID, itemName: 'Tenant Purchase', qty: 1, unitPrice: 8000, totalPrice: 8000, source: 'api', createdAt: new Date('2026-06-30T08:00:00.000Z') },
+      }))
+      await withTenant(OTHER_TENANT_ID, (tx) => tx.purchase.create({
+        data: { tenantId: OTHER_TENANT_ID, itemName: 'Other Purchase', qty: 1, unitPrice: 999999, totalPrice: 999999, source: 'api', createdAt: new Date('2026-06-30T08:00:00.000Z') },
+      }))
+
+      const params = { from: new Date('2026-06-29T21:00:00.000Z'), to: new Date('2026-06-30T20:59:59.999Z') }
+      const apiRes = await request(app)
+        .get('/api/v1/purchases/summary?from=2026-06-29T21:00:00.000Z&to=2026-06-30T20:59:59.999Z&groupBy=day')
+        .set('Authorization', `Bearer ${token}`)
+      const repoRes = await getPurchasesSummary(TEST_TENANT_ID, params, 'day')
+
+      expect(apiRes.status).toBe(200)
+      expect(apiRes.body.data.totalUgx).toBe(8000)
+      expect(apiRes.body.data.count).toBe(1)
+      expect(repoRes.totalUgx).toBe(8000)
+      expect(repoRes.count).toBe(1)
+    })
+  })
+
+  // -- GET /api/v1/purchases/:id ─────────────────────────────────────────────
 
   describe('GET /api/v1/purchases/:id', () => {
     it('returns a single purchase by ID', async () => {

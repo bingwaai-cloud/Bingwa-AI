@@ -10,15 +10,19 @@ import type { Express } from 'express'
 import { createApp } from '../../src/app.js'
 import { db, withTenant } from '../../src/db.js'
 import { createTestTenant, makeToken, seedItem, cleanupTenant, type TestTenant } from '../fixtures/tenant.js'
+import { findAllItems } from '../../src/repositories/itemRepository.js'
 
 const TEST_TENANT_ID = 'b2c3d4e5-0000-0000-0000-000000000001'
 const TEST_ITEM_ID   = 'b2c3d4e5-0000-0000-0000-000000000003'
 const INITIAL_QTY    = 20
 const LOW_THRESHOLD  = 5
+const OTHER_TENANT_ID = 'b2c3d4e5-0000-0000-0000-000000000101'
 
 async function resetItems(): Promise<void> {
   await withTenant(TEST_TENANT_ID, async (tx) => {
     
+    await tx.saleLineItem.deleteMany({})
+    await tx.sale.deleteMany({})
     await tx.item.deleteMany({ where: { id: { not: TEST_ITEM_ID } } })
     await tx.item.update({
       where: { id: TEST_ITEM_ID },
@@ -44,8 +48,11 @@ describe('Inventory API', () => {
   beforeAll(async () => {
     app = createApp()
     await cleanupTenant(TEST_TENANT_ID)
+    await cleanupTenant(OTHER_TENANT_ID)
     tenant = await createTestTenant({ id: TEST_TENANT_ID, ownerPhone: '+256700000088' })
     token = makeToken(tenant)
+    await createTestTenant({ id: OTHER_TENANT_ID, ownerPhone: '+256700000188' })
+    await seedItem(OTHER_TENANT_ID, { name: 'Other Tenant Sugar', unit: 'kg', qtyInStock: 99 })
     await seedItem(TEST_TENANT_ID, {
       id: TEST_ITEM_ID,
       name: 'Sugar',
@@ -58,6 +65,7 @@ describe('Inventory API', () => {
 
   afterAll(async () => {
     await cleanupTenant(TEST_TENANT_ID)
+    await cleanupTenant(OTHER_TENANT_ID)
     await db.$disconnect()
   })
 
@@ -84,6 +92,66 @@ describe('Inventory API', () => {
       expect(sugar).toBeDefined()
       expect(sugar.qtyInStock).toBe(INITIAL_QTY)
       expect(sugar.unit).toBe('kg')
+    })
+
+    it('paginates, sorts, and returns lastSoldAt without an unbounded response', async () => {
+      await seedItem(TEST_TENANT_ID, { name: 'Beans', unit: 'kg', qtyInStock: 12 })
+      await seedItem(TEST_TENANT_ID, { name: 'Rice', unit: 'kg', qtyInStock: 8 })
+      await withTenant(TEST_TENANT_ID, (tx) => tx.sale.create({
+        data: {
+          tenantId: TEST_TENANT_ID,
+          itemId: TEST_ITEM_ID,
+          itemName: 'Sugar',
+          qty: 1,
+          unitPrice: 6500,
+          totalPrice: 6500,
+          source: 'api',
+          createdAt: new Date('2026-06-30T08:00:00.000Z'),
+        },
+      }))
+
+      const res = await request(app)
+        .get('/api/v1/inventory?page=1&perPage=2&sortBy=name&sortOrder=desc')
+        .set('Authorization', `Bearer ${token}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.data).toHaveLength(2)
+      expect(res.body.meta).toEqual(expect.objectContaining({ total: 3, page: 1, perPage: 2 }))
+      expect(res.body.data.find((item: { name: string }) => item.name === 'Sugar')?.lastSoldAt).toBeTruthy()
+    })
+
+    it('searches by exact ILIKE or pg_trgm, not substring contains', async () => {
+      await seedItem(TEST_TENANT_ID, { name: 'Soap', nameNormalized: 'soap', unit: 'piece', qtyInStock: 9 })
+      await seedItem(TEST_TENANT_ID, { name: 'Soap Powder', nameNormalized: 'soap powder', unit: 'packet', qtyInStock: 4 })
+
+      const res = await request(app)
+        .get('/api/v1/inventory?search=soap')
+        .set('Authorization', `Bearer ${token}`)
+
+      expect(res.status).toBe(200)
+      expect(res.body.data.map((item: { name: string }) => item.name)).toContain('Soap')
+      expect(res.body.data.map((item: { name: string }) => item.name)).not.toContain('Soap Powder')
+    })
+
+    it('does not expose another tenant inventory through API or repository search', async () => {
+      const apiRes = await request(app)
+        .get('/api/v1/inventory?search=other tenant sugar')
+        .set('Authorization', `Bearer ${token}`)
+
+      expect(apiRes.status).toBe(200)
+      expect(apiRes.body.data).toHaveLength(0)
+
+      const repoRes = await withTenant(TEST_TENANT_ID, (tx) => findAllItems(tx, TEST_TENANT_ID, { search: 'other tenant sugar' }))
+      expect(repoRes.items).toHaveLength(0)
+    })
+
+    it('rejects invalid pagination query parameters', async () => {
+      const res = await request(app)
+        .get('/api/v1/inventory?perPage=101')
+        .set('Authorization', `Bearer ${token}`)
+
+      expect(res.status).toBe(400)
+      expect(res.body.error.code).toBe('VALIDATION_ERROR')
     })
 
     it('returns 401 without token', async () => {
