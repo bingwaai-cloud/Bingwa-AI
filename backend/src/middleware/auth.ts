@@ -25,14 +25,27 @@ declare global {
  * Verifies the JWT access token from the Authorization header.
  * On success, attaches req.user and req.tenantId.
  */
-export function authenticate(req: Request, res: Response, next: NextFunction): void {
+export function cookieValue(req: Request, name: string): string | undefined {
+  const cookie = req.headers['cookie']
+  if (!cookie) return undefined
+  const match = cookie.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))
+  if (!match) return undefined
+  return decodeURIComponent(match.slice(name.length + 1))
+}
+
+function bearerOrCookieToken(req: Request): string | undefined {
   const header = req.headers['authorization']
-  if (!header || !header.startsWith('Bearer ')) {
+  if (header?.startsWith('Bearer ')) return header.slice(7)
+  return cookieValue(req, 'accessToken')
+}
+
+export function authenticate(req: Request, res: Response, next: NextFunction): void {
+  const token = bearerOrCookieToken(req)
+  if (!token) {
     next(new AppError(ErrorCodes.UNAUTHORIZED, 'Missing authorization token', 401))
     return
   }
 
-  const token = header.slice(7)
   const secret = process.env['JWT_SECRET']
   if (!secret) {
     next(new AppError(ErrorCodes.INTERNAL_ERROR, 'Server misconfiguration', 500))
@@ -83,13 +96,12 @@ export function requireRole(...roles: JwtPayload['role'][]): (req: Request, res:
  * session (2FA setup confirmation) or a pending 2FA challenge token.
  */
 export function optionalAuthenticate(req: Request, _res: Response, next: NextFunction): void {
-  const header = req.headers['authorization']
-  if (!header || !header.startsWith('Bearer ')) {
+  const token = bearerOrCookieToken(req)
+  if (!token) {
     next()
     return
   }
 
-  const token = header.slice(7)
   const secret = process.env['JWT_SECRET']
   if (!secret) {
     next(new AppError(ErrorCodes.INTERNAL_ERROR, 'Server misconfiguration', 500))

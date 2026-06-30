@@ -149,6 +149,18 @@ export type LoginResult = AuthResult | {
 export type SetupTotpResult = { provisioningUri: string }
 export type VerifyTotpResult = AuthResult | { totpEnabled: true; recoveryCodes: string[] }
 export type RefreshResult = { accessToken: string; refreshToken: string }
+export type SessionResult = { tenant: TenantPublic; user: UserPublic }
+
+export async function getSession(tenantId: string, userId: string): Promise<SessionResult> {
+  const tenant = await tenantRepo.findTenantById(tenantId)
+  if (!tenant) throw new AppError(ErrorCodes.UNAUTHORIZED, 'Tenant not found.', 401)
+  const user = await withTenant(tenantId, (tx) => userRepo.findUserById(tx, tenantId, userId))
+  if (!user || !user.isActive) throw new AppError(ErrorCodes.UNAUTHORIZED, 'Account not found.', 401)
+  return {
+    tenant: { id: tenant.id, businessName: tenant.businessName, ownerPhone: tenant.ownerPhone },
+    user: toPublicUser(user),
+  }
+}
 
 export async function signup(input: SignupInput): Promise<AuthResult> {
   const phone = normalizePhone(input.ownerPhone)

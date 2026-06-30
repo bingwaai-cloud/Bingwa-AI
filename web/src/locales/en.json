@@ -176,5 +176,55 @@
     "monthly": "Monthly summary",
     "sales": "Sales",
     "purchases": "Purchases"
+  },
+  "auth": {
+    "carrier": { "mtn": "MTN", "airtel": "Airtel", "unknown": "Carrier" },
+    "login": {
+      "eyebrow": "Secure web access",
+      "title": "Sign in to Gezi",
+      "body": "Use your business phone and password. Your session is kept in a secure cookie.",
+      "phone": "Phone number",
+      "password": "Password",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
+      "submit": "Sign in",
+      "signingIn": "Signing in",
+      "error": "We couldn't sign you in. Check the phone and password.",
+      "rateLimited": "Too many tries right now. Please wait a little and try again."
+    },
+    "twoFactor": {
+      "title": "Enter your 6-digit code",
+      "body": "Open your authenticator app and enter the current code for Gezi AI.",
+      "code": "Authentication code",
+      "keypad": "Numeric keypad",
+      "clear": "Clear",
+      "back": "Back",
+      "submit": "Continue",
+      "checking": "Checking",
+      "error": "That code did not work. Try the newest code from your app.",
+      "rateLimited": "Too many code tries right now. Please wait a little and try again.",
+      "useRecovery": "Use a recovery code",
+      "useTotp": "Use the 6-digit code",
+      "recoveryLabel": "Recovery code",
+      "recoveryError": "That recovery code did not work. Check it and try again."
+    },
+    "setup": {
+      "title": "Set up two-factor security",
+      "body": "Owner accounts need a 6-digit authenticator code before using the dashboard.",
+      "loading": "Loading QR code",
+      "qrAlt": "Authenticator setup QR code",
+      "code": "Enter the 6-digit code",
+      "verify": "Verify and turn on",
+      "verifying": "Verifying",
+      "loadError": "We couldn't start two-factor setup. Try again.",
+      "verifyError": "That code did not work. Try the newest code from your app.",
+      "rateLimited": "Too many code tries right now. Please wait a little and try again.",
+      "codesTitle": "Save these recovery codes",
+      "codesBody": "These codes are shown once. Keep them somewhere safe before continuing.",
+      "copy": "Copy codes",
+      "copied": "Copied",
+      "download": "Download",
+      "saved": "I've saved these"
+    }
   }
 }

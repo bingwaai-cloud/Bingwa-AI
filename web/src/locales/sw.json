@@ -176,5 +176,55 @@
     "monthly": "Muhtasari wa kila mwezi",
     "sales": "Mauzo",
     "purchases": "Manunuzi"
+  },
+  "auth": {
+    "carrier": { "mtn": "MTN", "airtel": "Airtel", "unknown": "Mtandao" },
+    "login": {
+      "eyebrow": "Kuingia salama kwenye wavuti",
+      "title": "Ingia Gezi",
+      "body": "Tumia simu ya biashara na nenosiri. Kikao chako kinahifadhiwa kwenye cookie salama.",
+      "phone": "Nambari ya simu",
+      "password": "Nenosiri",
+      "showPassword": "Onyesha nenosiri",
+      "hidePassword": "Ficha nenosiri",
+      "submit": "Ingia",
+      "signingIn": "Tunaingia",
+      "error": "Hatukuweza kukuingiza. Kagua simu na nenosiri.",
+      "rateLimited": "Majaribio ni mengi kwa sasa. Subiri kidogo ujaribu tena."
+    },
+    "twoFactor": {
+      "title": "Weka msimbo wa tarakimu 6",
+      "body": "Fungua programu ya uthibitishaji na uweke msimbo wa sasa wa Gezi AI.",
+      "code": "Msimbo wa uthibitishaji",
+      "keypad": "Kitufe cha nambari",
+      "clear": "Futa",
+      "back": "Nyuma",
+      "submit": "Endelea",
+      "checking": "Tunakagua",
+      "error": "Msimbo huo haukufanya kazi. Tumia msimbo mpya kutoka kwenye programu yako.",
+      "rateLimited": "Majaribio ya msimbo ni mengi kwa sasa. Subiri kidogo ujaribu tena.",
+      "useRecovery": "Tumia recovery code",
+      "useTotp": "Tumia msimbo wa tarakimu 6",
+      "recoveryLabel": "Recovery code",
+      "recoveryError": "Recovery code hiyo haikufanya kazi. Ikague ujaribu tena."
+    },
+    "setup": {
+      "title": "Weka ulinzi wa two-factor",
+      "body": "Akaunti za wamiliki zinahitaji msimbo wa tarakimu 6 kabla ya kutumia dashibodi.",
+      "loading": "Tunapakia QR code",
+      "qrAlt": "QR code ya kuweka authenticator",
+      "code": "Weka msimbo wa tarakimu 6",
+      "verify": "Thibitisha na washa",
+      "verifying": "Tunathibitisha",
+      "loadError": "Hatukuweza kuanza two-factor setup. Jaribu tena.",
+      "verifyError": "Msimbo huo haukufanya kazi. Tumia msimbo mpya kutoka kwenye programu yako.",
+      "rateLimited": "Majaribio ya msimbo ni mengi kwa sasa. Subiri kidogo ujaribu tena.",
+      "codesTitle": "Hifadhi recovery codes hizi",
+      "codesBody": "Codes hizi zinaonyeshwa mara moja. Ziweke mahali salama kabla ya kuendelea.",
+      "copy": "Nakili codes",
+      "copied": "Zimenakiliwa",
+      "download": "Pakua",
+      "saved": "Nimezihifadhi"
+    }
   }
 }

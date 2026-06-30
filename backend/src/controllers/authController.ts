@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express'
 import { z } from 'zod'
 import { asyncHandler } from '../middleware/asyncHandler.js'
+import { cookieValue } from '../middleware/auth.js'
 import { AppError, ErrorCodes } from '../utils/AppError.js'
 import * as authService from '../services/authService.js'
 
@@ -49,12 +50,18 @@ function authCookieOptions() {
 function setSessionCookies(res: Response, tokens: { accessToken: string; refreshToken: string }): void {
   res.cookie('accessToken', tokens.accessToken, { ...authCookieOptions(), maxAge: 15 * 60 * 1000 })
   res.cookie('refreshToken', tokens.refreshToken, { ...authCookieOptions(), maxAge: 7 * 24 * 60 * 60 * 1000 })
+  res.clearCookie('twoFactorToken', authCookieOptions())
+}
+
+function setTwoFactorCookie(res: Response, token: string): void {
+  res.cookie('accessToken', token, { ...authCookieOptions(), maxAge: 5 * 60 * 1000 })
+  res.cookie('twoFactorToken', token, { ...authCookieOptions(), maxAge: 5 * 60 * 1000 })
 }
 
 function bearerToken(req: Request): string | undefined {
   const header = req.headers['authorization']
-  if (!header || !header.startsWith('Bearer ')) return undefined
-  return header.slice(7)
+  if (header?.startsWith('Bearer ')) return header.slice(7)
+  return cookieValue(req, 'twoFactorToken')
 }
 
 export const signup = asyncHandler(async (req: Request, res: Response) => {
@@ -90,11 +97,11 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.login(parsed.data.phone, parsed.data.password)
 
   if ('twoFactorRequired' in result) {
+    setTwoFactorCookie(res, result.twoFactorToken)
     res.status(200).json({
       success: true,
       data: {
         twoFactorRequired: true,
-        twoFactorToken: result.twoFactorToken,
         tenant: result.tenant,
         user: result.user,
       },
@@ -116,7 +123,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
 
 export const refresh = asyncHandler(async (req: Request, res: Response) => {
   const parsed = RefreshSchema.safeParse(req.body)
-  const cookieToken = ((req as Request & { cookies?: { refreshToken?: string } }).cookies)?.refreshToken
+  const cookieToken = cookieValue(req, 'refreshToken')
   const refreshToken = parsed.success ? parsed.data.refreshToken ?? cookieToken : cookieToken
   if (!refreshToken) {
     throw new AppError(ErrorCodes.VALIDATION_ERROR, 'refreshToken is required.', 400)
@@ -125,6 +132,12 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.refreshTokens(refreshToken)
   setSessionCookies(res, result)
 
+  res.status(200).json({ success: true, data: result })
+})
+
+export const session = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user || !req.tenantId) throw new AppError(ErrorCodes.UNAUTHORIZED, 'Not authenticated.', 401)
+  const result = await authService.getSession(req.tenantId, req.user.userId)
   res.status(200).json({ success: true, data: result })
 })
 
@@ -175,5 +188,6 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
   await authService.logout(req.tenantId, req.user.userId)
   res.clearCookie('accessToken', authCookieOptions())
   res.clearCookie('refreshToken', authCookieOptions())
+  res.clearCookie('twoFactorToken', authCookieOptions())
   res.status(200).json({ success: true, data: { message: 'Logged out successfully.' } })
 })

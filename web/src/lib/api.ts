@@ -11,6 +11,38 @@ export type ApiError = {
   field?: string;
 };
 
+export type AuthUser = {
+  id: string;
+  phone: string;
+  name: string | null;
+  role: "owner" | "manager" | "cashier" | string;
+  totpEnabled?: boolean;
+};
+
+export type AuthTenant = {
+  id: string;
+  businessName: string;
+  ownerPhone: string;
+};
+
+export type AuthSession = {
+  tenant: AuthTenant;
+  user: AuthUser;
+};
+
+export type LoginResponse = AuthSession & {
+  twoFactorRequired?: true;
+};
+
+export type TwoFactorSetupResponse = {
+  provisioningUri: string;
+};
+
+export type TwoFactorVerifyResponse = Partial<AuthSession> & {
+  totpEnabled?: true;
+  recoveryCodes?: string[];
+};
+
 export type ApiSuccess<T> = {
   success: true;
   data: T;
@@ -45,7 +77,24 @@ type ApiRequestOptions = Omit<RequestInit, "body" | "credentials" | "headers"> &
   headers?: HeadersInit;
 };
 
+function isTwoFactorRequired(error: ApiError): boolean {
+  return error.message.toLowerCase().includes("two-factor") || error.code === "TWO_FACTOR_REQUIRED";
+}
+
+async function refreshSession(): Promise<boolean> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+    method: "POST",
+    headers: { Accept: "application/json", "x-gezi-source": "web" },
+    credentials: "include"
+  });
+  return response.ok;
+}
+
 export async function apiRequest<T>(path: `/api/v1/${string}`, options: ApiRequestOptions = {}): Promise<ApiSuccess<T>> {
+  return apiRequestInternal<T>(path, options, true);
+}
+
+async function apiRequestInternal<T>(path: `/api/v1/${string}`, options: ApiRequestOptions, allowRefresh: boolean): Promise<ApiSuccess<T>> {
   const headers = new Headers(options.headers);
   headers.set("Accept", "application/json");
   headers.set("x-gezi-source", "web");
@@ -66,10 +115,39 @@ export async function apiRequest<T>(path: `/api/v1/${string}`, options: ApiReque
   const envelope = (await response.json()) as ApiEnvelope<T>;
 
   if (!envelope.success) {
-    throw new ApiClientError(envelope.error, response.status);
+    const error = new ApiClientError(envelope.error, response.status);
+    if (response.status === 401 && allowRefresh && !isTwoFactorRequired(envelope.error) && path !== "/api/v1/auth/refresh") {
+      const refreshed = await refreshSession();
+      if (refreshed) return apiRequestInternal<T>(path, options, false);
+    }
+    throw error;
   }
 
   return envelope;
+}
+
+export async function login(phone: string, password: string): Promise<LoginResponse> {
+  return (await apiRequest<LoginResponse>("/api/v1/auth/login", { method: "POST", body: { phone, password } })).data;
+}
+
+export async function getSession(): Promise<AuthSession> {
+  return (await apiRequest<AuthSession>("/api/v1/auth/session")).data;
+}
+
+export async function verifyTwoFactor(code: string): Promise<TwoFactorVerifyResponse> {
+  return (await apiRequest<TwoFactorVerifyResponse>("/api/v1/auth/2fa/verify", { method: "POST", body: { code } })).data;
+}
+
+export async function verifyRecoveryCode(recoveryCode: string): Promise<TwoFactorVerifyResponse> {
+  return (await apiRequest<TwoFactorVerifyResponse>("/api/v1/auth/2fa/recovery", { method: "POST", body: { recoveryCode } })).data;
+}
+
+export async function setupTwoFactor(): Promise<TwoFactorSetupResponse> {
+  return (await apiRequest<TwoFactorSetupResponse>("/api/v1/auth/2fa/setup", { method: "POST" })).data;
+}
+
+export async function verifyTwoFactorSetup(code: string): Promise<TwoFactorVerifyResponse> {
+  return (await apiRequest<TwoFactorVerifyResponse>("/api/v1/auth/2fa/verify", { method: "POST", body: { code } })).data;
 }
 
 export type ProvenanceSource = "whatsapp" | "web" | "mobile" | "api" | "pos" | string;

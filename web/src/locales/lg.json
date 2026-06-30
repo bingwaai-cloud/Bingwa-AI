@@ -176,5 +176,55 @@
     "monthly": "Alipoota ya buli mwezi",
     "sales": "Ebitundiddwa",
     "purchases": "Ebiguliddwa"
+  },
+  "auth": {
+    "carrier": { "mtn": "MTN", "airtel": "Airtel", "unknown": "Omukutu" },
+    "login": {
+      "eyebrow": "Okuyingira ku mukutu okukuume",
+      "title": "Yingira mu Gezi",
+      "body": "Kozesa essimu ya bizinensi ne password. Session yo ekuumibwa mu cookie ey'obukuumi.",
+      "phone": "Ennamba y'essimu",
+      "password": "Password",
+      "showPassword": "Laga password",
+      "hidePassword": "Kweka password",
+      "submit": "Yingira",
+      "signingIn": "Tukuyingiza",
+      "error": "Tetuyinza kukuyingiza. Kebera essimu ne password.",
+      "rateLimited": "Wabaddewo okugezaako kungi kati. Lindako katono ogezeeko nate."
+    },
+    "twoFactor": {
+      "title": "Teekamu code ya namba 6",
+      "body": "Ggulawo app ya authenticator oteekemu code ya Gezi AI eriwo kati.",
+      "code": "Code y'obukuumi",
+      "keypad": "Amapeesa ga namba",
+      "clear": "Sangula",
+      "back": "Ddayo",
+      "submit": "Genda mu maaso",
+      "checking": "Tukebera",
+      "error": "Code eyo teyakola. Kozesa code empya okuva mu app yo.",
+      "rateLimited": "Okugezaako code kungi kati. Lindako katono ogezeeko nate.",
+      "useRecovery": "Kozesa recovery code",
+      "useTotp": "Kozesa code ya namba 6",
+      "recoveryLabel": "Recovery code",
+      "recoveryError": "Recovery code eyo teyakola. Gikebere ogezeeko nate."
+    },
+    "setup": {
+      "title": "Teekateeka obukuumi bwa two-factor",
+      "body": "Akawunti za bannannyini bizinensi zeetaaga code ya namba 6 nga dashboard tennakozesebwa.",
+      "loading": "Tuleeta QR code",
+      "qrAlt": "QR code ey'okutegeka authenticator",
+      "code": "Teekamu code ya namba 6",
+      "verify": "Kakasa ogikoleze",
+      "verifying": "Tukakasa",
+      "loadError": "Tetuyinza kutandika two-factor setup. Gezaako nate.",
+      "verifyError": "Code eyo teyakola. Kozesa code empya okuva mu app yo.",
+      "rateLimited": "Okugezaako code kungi kati. Lindako katono ogezeeko nate.",
+      "codesTitle": "Tereka recovery codes zino",
+      "codesBody": "Codes zino ziragibwa omulundi gumu. Zitereke mu kifo ekikuume nga tonnagenda mu maaso.",
+      "copy": "Koppa codes",
+      "copied": "Zikoppeddwa",
+      "download": "Wanula",
+      "saved": "Nziterese"
+    }
   }
 }

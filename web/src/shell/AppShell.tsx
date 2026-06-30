@@ -1,9 +1,10 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { Navigate, NavLink, Outlet, useLocation } from "react-router-dom";
 import { BarChart3, Boxes, Home, Plus, ReceiptText, Settings, Users } from "lucide-react";
 import type React from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/features/auth/AuthContext";
 import { cn } from "@/lib/utils";
 
 const mobileNavItems = [
@@ -21,6 +22,10 @@ const desktopNavItems = [
 
 export function AppShell(): React.ReactElement {
   const { t } = useTranslation();
+  const { session } = useAuth();
+  const location = useLocation();
+
+  if (session?.user.role === "owner" && !session.user.totpEnabled && location.pathname !== "/settings/2fa") return <Navigate to="/settings/2fa" replace />;
 
   return (
     <div className="min-h-dvh bg-surface-1 text-ink-900">

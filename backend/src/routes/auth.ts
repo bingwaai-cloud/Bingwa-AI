@@ -39,6 +39,7 @@ authRouter.post('/signup', authController.signup)
 authRouter.post('/login', loginRateLimit, authController.login)
 authRouter.post('/refresh', authController.refresh)
 authRouter.post('/logout', authenticate, authController.logout)
+authRouter.get('/session', authenticate, authController.session)
 
 authRouter.post('/2fa/setup', authenticate, authController.setupTotp)
 authRouter.post('/2fa/verify', twoFactorVerifyRateLimit, optionalAuthenticate, authController.verifyTotp)
