@@ -102,6 +102,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
       success: true,
       data: {
         twoFactorRequired: true,
+        twoFactorToken: result.twoFactorToken,
         tenant: result.tenant,
         user: result.user,
       },
