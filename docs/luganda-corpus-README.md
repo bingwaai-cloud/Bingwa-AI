@@ -10,9 +10,18 @@ Pre-generated JSON artifacts live in:
 ## Regeneration command
 If you change the schema (add a field to the JSON shape), regenerate from the workbook:
 ```
-# (workbook → JSON pipeline — see 9.2-ingestion-outputs/README.md)
+npx tsx scripts/intake-to-corpus.ts "../docs/Learn Luganda/Gezi_AI_Luganda_Corpus_Intake.xlsx"
 ```
 For normal use, copy the pre-generated files — do not re-translate or re-key.
+
+## Continuous-update loop
+1. **Edit** the intake workbook (`docs/Learn Luganda/Gezi_AI_Luganda_Corpus_Intake.xlsx`) — fill in `→ fill in` / `→ Y/N` / `→ confirm or correct` cells.
+2. **Run** `npx tsx scripts/intake-to-corpus.ts "../docs/Learn Luganda/Gezi_AI_Luganda_Corpus_Intake.xlsx"` — appends new advisory cases, alias rows, and phrase rows.
+3. **Review** the summary table + `docs/Learn Luganda/intake-review-needed.json` (unmappable intents — assign manually).
+4. **Seed aliases** (if new): `SEED_LUGANDA_ALIASES=1 npx tsx db/scripts/seed-luganda-aliases.ts`
+5. **Commit** all changed JSON files.
+
+The script is **idempotent**: dedup on normalized utterance (cases) / (alias, canonical) alone — re-running on an unchanged workbook emits ZERO new records. `ingestedOn`/`batch` stamp new records only.
 
 ## Where things land
 | Source | Destination | Purpose |
