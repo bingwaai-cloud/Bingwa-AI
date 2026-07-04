@@ -6,9 +6,24 @@ import { logger } from './utils/logger.js'
 import { createApp } from './app.js'
 import { db } from './db.js'
 import { startScheduler } from './scheduler/scheduler.js'
+import { assertProductionDbSecurity } from './utils/dbSecurityAssertions.js'
 
 // ─── Fail fast if config is incomplete ────────────────────────────────────────
 validateEnv()
+
+// ─── Production DB security gate ──────────────────────────────────────────────
+if (process.env['NODE_ENV'] === 'production') {
+  void (async () => {
+    try {
+      await assertProductionDbSecurity()
+      logger.info({ event: 'db_security_assertions_passed' })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      logger.error({ event: 'db_security_assertions_failed', message })
+      process.exit(1)
+    }
+  })()
+}
 
 const PORT = Number(process.env['PORT']) || 3000
 

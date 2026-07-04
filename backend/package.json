@@ -13,7 +13,7 @@
     "test:api": "node --experimental-vm-modules node_modules/jest/bin/jest.js tests/api --verbose",
     "test:reports": "node --experimental-vm-modules node_modules/jest/bin/jest.js tests/unit/reports --verbose --forceExit",
     "migrate": "prisma migrate dev --schema=db/schema.prisma",
-    "migrate:prod": "prisma migrate deploy --schema=db/schema.prisma",
+    "migrate:prod": "prisma migrate deploy --schema=db/schema.prisma && tsx scripts/apply-migrations.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:test": "tsc --project tsconfig.test.json --noEmit",
     "lint": "node node_modules/eslint/bin/eslint.js src --ext .ts",
