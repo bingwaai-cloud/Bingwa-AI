@@ -78,7 +78,7 @@ describe('WhatsApp persisted draft flow', () => {
     expect(sendTextMessage).toHaveBeenCalledWith(PHONE, 'What was the price for Sugar?')
 
     await db.$disconnect()
-    await processIncomingText(PHONE, '6500 each', 'wamid.answer')
+    await processIncomingText({ phone: PHONE, bsuid: null, replyTarget: PHONE }, '6500 each', 'wamid.answer')
 
     const persisted = await withTenant(TENANT_ID, async (tx) => {
       const draft = await tx.draftTransaction.findFirst({ where: { id: pending?.id, tenantId: TENANT_ID } })

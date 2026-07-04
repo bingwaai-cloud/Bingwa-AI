@@ -79,6 +79,8 @@ tenant context is set (phone → tenant resolution, auth, etc.):
   unverified input (no `findMany({})`, no listing all memberships by tenantId
   that came from user input, etc.). Phone comes from `normalizePhone()` on the
   Meta webhook payload's `from` field; it is NEVER derived from the message body.
+- **`channel_identities`** (public.channel_identities, WP-26) — BSUID→phone
+  cross-channel identity lookup. Must be queryable BEFORE tenant resolution.
 - **`subscriptions`**, **`payment_transactions`**, **`platform_suppliers`** —
   cross-tenant / non-tenant-scoped tables.
 

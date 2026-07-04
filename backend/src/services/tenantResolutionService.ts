@@ -1,19 +1,24 @@
 import { logger } from '../utils/logger.js'
+import { maskBsuid } from '../utils/phone.js'
 import {
   findMembershipsByPhone,
   findMembership,
   switchActiveContext,
   type TenantMembership,
 } from '../repositories/tenantUserRepository.js'
+import { findPhoneByBsuid, upsertChannelIdentity } from '../repositories/channelIdentityRepository.js'
 
 /**
- * Tenant resolution service (WP-12).
+ * Tenant resolution service (WP-12 + WP-26).
  *
  * Replaces the old single-tenant findTenantByOwnerPhone() with multi-membership
  * resolution. A phone may belong to MULTIPLE tenants. Resolution:
  *   0 memberships → null (caller sends registration message)
  *   1 membership  → that tenant (proceed)
  *   >1 memberships → the one with is_active_context = true
+ *
+ * WP-26: BSUID-aware resolution. WhatsApp usernames → webhook carries BSUID
+ * instead of phone. Resolution now works across both identity types.
  *
  * This module lives in services/, NOT in src/channels/whatsapp/ — channel adapters
  * call into it.
@@ -32,11 +37,24 @@ export interface ResolutionResult {
   hasMultipleBusinesses: boolean
   /** all memberships (only populated when >1, for "switch" listing) */
   memberships: TenantMembership[]
+  /** BSUID from the inbound webhook (null for phone-only resolutions) */
+  bsuid: string | null
 }
 
 /**
- * Resolve the active tenant for a WhatsApp sender.
+ * Discriminated union for the identity-based resolution result.
+ */
+export type TenantResolution =
+  | { kind: 'resolved'; resolution: ResolutionResult }
+  | { kind: 'unregistered_phone' }
+  | { kind: 'unregistered_bsuid'; bsuid: string }
+
+/**
+ * Resolve the active tenant for a WhatsApp sender (by phone only).
  * Returns null if the phone has zero memberships (caller sends registration).
+ *
+ * This is the legacy phone-only path. New callers should use
+ * resolveTenantByIdentity() which handles BSUIDs too.
  */
 export async function resolveTenant(phone: string): Promise<ResolutionResult | null> {
   const memberships = await findMembershipsByPhone(phone)
@@ -60,6 +78,7 @@ export async function resolveTenant(phone: string): Promise<ResolutionResult | n
       role: m.role,
       hasMultipleBusinesses: false,
       memberships,
+      bsuid: null,
     }
   }
 
@@ -78,6 +97,7 @@ export async function resolveTenant(phone: string): Promise<ResolutionResult | n
       role: active.role,
       hasMultipleBusinesses: true,
       memberships,
+      bsuid: null,
     }
   }
 
@@ -100,7 +120,77 @@ export async function resolveTenant(phone: string): Promise<ResolutionResult | n
     memberships: memberships.map((m) =>
       m.tenantId === first.tenantId ? { ...m, isActiveContext: true } : m
     ),
+    bsuid: null,
   }
+}
+
+/**
+ * Resolve tenant from a channel identity (phone and/or BSUID). WP-26.
+ *
+ * Resolution order:
+ *   a. Phone present → existing phone-path (unchanged), plus background
+ *      UPSERT of BSUID→phone mapping when BSUID also present.
+ *   b. BSUID only → look up channel_identities → if phone found →
+ *      resolveTenant(phone); if unknown → unregistered_bsuid.
+ *
+ * IMPORTANT (WP-26 security): typed-phone auto-linking is FORBIDDEN.
+ * When a BSUID-only unknown user replies with a phone number, do NOT
+ * auto-link the typed phone to the BSUID — this is an account-takeover
+ * vector. The channel_identities mapping is ONLY populated from
+ * Meta-webhook co-occurrence (phone + BSUID arriving in the same event)
+ * or an OTP-verified flow (WP-26b). For now, the onboarding reply asks
+ * the user to sign up at gezi.ai or contact their shop owner.
+ */
+export async function resolveTenantByIdentity(params: {
+  phone?: string
+  bsuid?: string
+}): Promise<TenantResolution> {
+  const { phone, bsuid } = params
+
+  // ── Path A: Phone present ─────────────────────────────────────────────
+  if (phone) {
+    // Background: if BSUID also present, mirror the mapping
+    if (bsuid) {
+      upsertChannelIdentity({
+        channel: 'whatsapp',
+        identity_type: 'bsuid',
+        external_id: bsuid,
+        phone,
+      }).catch((err) => {
+        logger.error({ event: 'channel_identity_upsert_error', bsuid: maskBsuid(bsuid), err })
+      })
+    }
+
+    const result = await resolveTenant(phone)
+    if (!result) return { kind: 'unregistered_phone' }
+    return { kind: 'resolved', resolution: { ...result, bsuid: bsuid ?? null } }
+  }
+
+  // ── Path B: BSUID only ────────────────────────────────────────────────
+  if (bsuid) {
+    const resolvedPhone = await findPhoneByBsuid('whatsapp', bsuid)
+
+    if (resolvedPhone) {
+      // BSUID → phone mapping exists → resolve by phone
+      logger.info({ event: 'tenant_resolution_bsuid_to_phone', bsuid: maskBsuid(bsuid), phone: resolvedPhone.slice(0, 6) + '****' })
+      const result = await resolveTenant(resolvedPhone)
+      if (!result) {
+        // Mapped phone has no memberships (shouldn't happen — the mapping
+        // was created from a prior phone+BSUID co-occurrence that
+        // successfully resolved, but membership could have been deleted)
+        logger.warn({ event: 'tenant_resolution_bsuid_orphaned_phone', bsuid: maskBsuid(bsuid), phone: resolvedPhone.slice(0, 6) + '****' })
+        return { kind: 'unregistered_bsuid', bsuid }
+      }
+      return { kind: 'resolved', resolution: { ...result, bsuid } }
+    }
+
+    // BSUID unknown — no phone mapping, no resolution
+    logger.info({ event: 'tenant_resolution_bsuid_unknown', bsuid: maskBsuid(bsuid) })
+    return { kind: 'unregistered_bsuid', bsuid }
+  }
+
+  // Neither phone nor BSUID provided
+  return { kind: 'unregistered_phone' }
 }
 
 export interface SwitchResult {

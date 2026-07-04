@@ -4,7 +4,7 @@ const handleIncomingMessage = jest.fn<() => Promise<void>>()
 const sendTextMessage = jest.fn<() => Promise<void>>()
 const resolvePendingDraftMessage = jest.fn<() => Promise<unknown>>()
 const resolveConfirmDefaultMessage = jest.fn<() => Promise<unknown>>()
-const resolveTenant = jest.fn<() => Promise<unknown>>()
+const resolveTenantByIdentity = jest.fn<() => Promise<unknown>>()
 const handleSwitchCommand = jest.fn<() => Promise<unknown>>()
 
 jest.unstable_mockModule('../../../src/channels/whatsapp/echoBot.js', () => ({
@@ -18,7 +18,7 @@ jest.unstable_mockModule('../../../src/channels/whatsapp/whatsappClient.js', () 
 }))
 
 jest.unstable_mockModule('../../../src/services/tenantResolutionService.js', () => ({
-  resolveTenant,
+  resolveTenantByIdentity,
   handleSwitchCommand,
 }))
 
@@ -27,7 +27,7 @@ jest.unstable_mockModule('../../../src/services/draftsService.js', () => ({
   resolveConfirmDefaultMessage,
 }))
 
-let processIncomingText: (from: string, text: string, messageId: string) => Promise<void>
+let processIncomingText: (identity: { phone: string | null; bsuid: string | null; replyTarget: string }, text: string, messageId: string) => Promise<void>
 let processWebhookPayload: (body: { object: string; entry: unknown[] }) => Promise<void>
 
 beforeAll(async () => {
@@ -60,6 +60,18 @@ const singleResolution = {
       isActiveContext: true,
     },
   ],
+  bsuid: null,
+}
+
+/** ChannelIdentity for a phone-only sender */
+const phoneIdentity = { phone: '+256700000401', bsuid: null, replyTarget: '0700000401' }
+
+function phoneRes(result: unknown) {
+  return { kind: 'resolved', resolution: result }
+}
+
+function unregisteredPhone() {
+  return { kind: 'unregistered_phone' }
 }
 
 describe('WhatsApp draft-first message processing', () => {
@@ -68,13 +80,13 @@ describe('WhatsApp draft-first message processing', () => {
     handleIncomingMessage.mockResolvedValue()
     sendTextMessage.mockResolvedValue()
     resolveConfirmDefaultMessage.mockResolvedValue(null)
-    resolveTenant.mockResolvedValue(null) // default: unknown sender
+    resolveTenantByIdentity.mockResolvedValue(unregisteredPhone()) // default: unknown sender
   })
 
   it('sends registration message when phone has zero memberships', async () => {
-    resolveTenant.mockResolvedValue(null)
+    resolveTenantByIdentity.mockResolvedValue(unregisteredPhone())
 
-    await processIncomingText('0700000401', 'stock check', 'wamid.1')
+    await processIncomingText(phoneIdentity, 'stock check', 'wamid.1')
 
     expect(handleIncomingMessage).toHaveBeenCalledWith('0700000401', 'stock check', 'wamid.1')
     // No draft resolution attempted for unknown users
@@ -89,10 +101,10 @@ describe('WhatsApp draft-first message processing', () => {
       message: 'Switched to *Test Shop*',
     })
 
-    await processIncomingText('0700000401', 'switch 1', 'wamid.2')
+    await processIncomingText(phoneIdentity, 'switch 1', 'wamid.2')
 
     expect(handleSwitchCommand).toHaveBeenCalledWith('+256700000401', '1')
-    expect(sendTextMessage).toHaveBeenCalledWith('+256700000401', 'Switched to *Test Shop*')
+    expect(sendTextMessage).toHaveBeenCalledWith('0700000401', 'Switched to *Test Shop*')
     expect(handleIncomingMessage).not.toHaveBeenCalled()
   })
 
@@ -104,14 +116,14 @@ describe('WhatsApp draft-first message processing', () => {
       message: 'You have 2 businesses:\n1. Shop A\n2. Shop B',
     })
 
-    await processIncomingText('0700000401', 'switch', 'wamid.3')
+    await processIncomingText(phoneIdentity, 'switch', 'wamid.3')
 
     expect(handleSwitchCommand).toHaveBeenCalledWith('+256700000401', undefined)
-    expect(sendTextMessage).toHaveBeenCalledWith('+256700000401', 'You have 2 businesses:\n1. Shop A\n2. Shop B')
+    expect(sendTextMessage).toHaveBeenCalledWith('0700000401', 'You have 2 businesses:\n1. Shop A\n2. Shop B')
   })
 
   it('resolves a pending draft and does not parse the reply as a new intent', async () => {
-    resolveTenant.mockResolvedValue(singleResolution)
+    resolveTenantByIdentity.mockResolvedValue(phoneRes(singleResolution))
     resolvePendingDraftMessage.mockResolvedValue({
       draft: {
         payload: {
@@ -122,7 +134,7 @@ describe('WhatsApp draft-first message processing', () => {
       committedEntityId: 'd1b2c3d4-0000-0000-0000-0000000000a2',
     })
 
-    await processIncomingText('0700000401', '6500 each', 'wamid.4')
+    await processIncomingText(phoneIdentity, '6500 each', 'wamid.4')
 
     expect(resolvePendingDraftMessage).toHaveBeenCalledWith(
       'd1b2c3d4-0000-0000-0000-0000000000a1',
@@ -130,14 +142,14 @@ describe('WhatsApp draft-first message processing', () => {
       '6500 each'
     )
     expect(handleIncomingMessage).not.toHaveBeenCalled()
-    expect(sendTextMessage).toHaveBeenCalledWith('+256700000401', expect.stringContaining('Sale recorded'))
+    expect(sendTextMessage).toHaveBeenCalledWith('0700000401', expect.stringContaining('Sale recorded'))
   })
 
   it('checks for a pending draft before delegating a new message to NLP handling', async () => {
-    resolveTenant.mockResolvedValue(singleResolution)
+    resolveTenantByIdentity.mockResolvedValue(phoneRes(singleResolution))
     resolvePendingDraftMessage.mockResolvedValue(null)
 
-    await processIncomingText('0700000401', 'stock check', 'wamid.5')
+    await processIncomingText(phoneIdentity, 'stock check', 'wamid.5')
 
     expect(resolvePendingDraftMessage.mock.invocationCallOrder[0]).toBeLessThan(
       handleIncomingMessage.mock.invocationCallOrder[0]!
@@ -151,13 +163,13 @@ describe('WhatsApp draft-first message processing', () => {
   })
 
   it('sends reversal reply and skips NLP when "NO" triggers confirm-default undo', async () => {
-    resolveTenant.mockResolvedValue(singleResolution)
+    resolveTenantByIdentity.mockResolvedValue(phoneRes(singleResolution))
     resolveConfirmDefaultMessage.mockResolvedValue({
       status: 'reversed',
-      reply: '↩️ Sugar has been undone. Stock restored. Please re-enter your corrected sale.',
+      reply: '\u21A9\uFE0F Sugar has been undone. Stock restored. Please re-enter your corrected sale.',
     })
 
-    await processIncomingText('0700000401', 'NO', 'wamid.6')
+    await processIncomingText(phoneIdentity, 'NO', 'wamid.6')
 
     expect(resolveConfirmDefaultMessage).toHaveBeenCalledWith(
       'd1b2c3d4-0000-0000-0000-0000000000a1',
@@ -165,8 +177,8 @@ describe('WhatsApp draft-first message processing', () => {
       'NO'
     )
     expect(sendTextMessage).toHaveBeenCalledWith(
-      '+256700000401',
-      '↩️ Sugar has been undone. Stock restored. Please re-enter your corrected sale.'
+      '0700000401',
+      '\u21A9\uFE0F Sugar has been undone. Stock restored. Please re-enter your corrected sale.'
     )
     expect(resolvePendingDraftMessage).not.toHaveBeenCalled()
     expect(handleIncomingMessage).not.toHaveBeenCalled()
@@ -193,21 +205,22 @@ describe('WhatsApp draft-first message processing', () => {
         },
       ],
     }
-    resolveTenant.mockResolvedValue(multiResolution)
+    resolveTenantByIdentity.mockResolvedValue(phoneRes(multiResolution))
     resolveConfirmDefaultMessage.mockResolvedValue({
       status: 'reversed',
-      reply: '↩️ Sugar has been undone. Stock restored.',
+      reply: '\u21A9\uFE0F Sugar has been undone. Stock restored.',
     })
 
-    await processIncomingText('0700000401', 'NO', 'wamid.7')
+    await processIncomingText(phoneIdentity, 'NO', 'wamid.7')
 
     expect(sendTextMessage).toHaveBeenCalledWith(
-      '+256700000401',
-      '[Mama Sarah Shop] ↩️ Sugar has been undone. Stock restored.'
+      '0700000401',
+      '[Mama Sarah Shop] \u21A9\uFE0F Sugar has been undone. Stock restored.'
     )
   })
+
   it('resolves a 360dialog-forwarded Cloud API inbound body by sender phone', async () => {
-    resolveTenant.mockResolvedValue(singleResolution)
+    resolveTenantByIdentity.mockResolvedValue(phoneRes(singleResolution))
     resolvePendingDraftMessage.mockResolvedValue(null)
 
     await processWebhookPayload({
@@ -239,7 +252,7 @@ describe('WhatsApp draft-first message processing', () => {
     await new Promise<void>((resolve) => setImmediate(resolve))
     await new Promise<void>((resolve) => setImmediate(resolve))
 
-    expect(resolveTenant).toHaveBeenCalledWith('+256700000401')
+    expect(resolveTenantByIdentity).toHaveBeenCalledWith({ phone: '+256700000401', bsuid: undefined })
     expect(handleIncomingMessage).toHaveBeenCalledWith(
       '256700000401',
       'stock check',

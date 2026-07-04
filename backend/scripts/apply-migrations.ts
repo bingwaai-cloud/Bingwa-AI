@@ -6,7 +6,7 @@
  * Production would run with NO RLS and NO audit immutability. This script fixes that.
  *
  * ═══════════════════════ MIGRATION LIST (matches globalSetup.cjs exactly) ═══════
- * Applied (003–020):
+ * Applied (003–022):
  *   003_platform_orders.sql
  *   004_consolidate_tenants.sql
  *   006_enable_rls.sql
@@ -24,6 +24,7 @@
  *   018_branch_id.sql
  *   019_audit_log_immutable.sql
  *   020_user_2fa.sql
+ *   022_channel_identities.sql
  *
  * Intentionally EXCLUDED:
  *   001_global_schema.sql        — superseded by Prisma baseline (camelCase columns)
@@ -75,6 +76,7 @@ const MIGRATION_FILES: readonly string[] = [
   '018_branch_id.sql',
   '019_audit_log_immutable.sql',
   '020_user_2fa.sql',
+  '022_channel_identities.sql',
 ]
 
 // ── Resolve paths ─────────────────────────────────────────────────────────────

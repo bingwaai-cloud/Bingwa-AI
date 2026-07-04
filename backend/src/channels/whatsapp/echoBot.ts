@@ -28,30 +28,37 @@ const CONFIRM_DEFAULT_WINDOW_MS = 10 * 60 * 1000 // 10 minutes
  * (RLS-scoped). Service calls take only tenantId -- they open their own
  * withTenant internally.
  *
+ * @param replyTarget The inbound target for replies — phone or BSUID
+ *   (WP-26). Passed through to sendTextMessage for correct reply routing.
+ *   DB operations always use resolution.phone (tenant_users is phone-keyed).
  * @param resolution Optional pre-resolved tenant context from messageProcessor.
  *   When omitted (e.g. registration flow), falls back to resolving by phone.
  */
 export async function handleIncomingMessage(
-  fromPhone: string,
+  replyTarget: string,
   messageText: string,
   messageId: string,
   resolution?: ResolutionResult
 ): Promise<void> {
-  const phone = normalizePhone(fromPhone)
+  // WP-26: resolution.phone is authoritative for DB operations.
+  // replyTarget is only for sendTextMessage (may be phone or BSUID).
+  const logPhone = resolution ? maskPhone(resolution.phone) : maskPhone(replyTarget)
 
   logger.info({
     event: 'whatsapp_message_received',
-    phone: maskPhone(phone),
+    phone: logPhone,
     messageId,
     preview: messageText.slice(0, 60),
   })
 
   // Resolve tenant if not provided (registration/no-membership path)
   if (!resolution) {
+    // This path is only reached for unregistered_phone — replyTarget is a phone
+    const phone = normalizePhone(replyTarget)
     const resolved = await resolveTenant(phone)
     if (!resolved) {
       await sendTextMessage(
-        phone,
+        replyTarget,
         "Hi! I'm Gezi AI 🏆\nTo get started, sign up at gezi.ai or ask your shop owner to add you as a user."
       )
       logger.info({ event: 'whatsapp_unknown_sender', phone: maskPhone(phone) })
@@ -62,6 +69,7 @@ export async function handleIncomingMessage(
 
   const tenantId = resolution.tenantId
   const businessName = resolution.businessName
+  const phone = resolution.phone // Authoritative: from tenant_users, always E.164
 
   const contextRecord = await withTenant(tenantId, (tx) => upsertUserContext(tx, tenantId, phone))
   const dbItemsPage = await withTenant(tenantId, (tx) => findAllItems(tx, tenantId, { perPage: 100 }))
@@ -176,7 +184,7 @@ export async function handleIncomingMessage(
         : 'Something went wrong. Your data is safe. Please try again.'
   }
 
-  await sendTextMessage(phone, reply)
+  await sendTextMessage(replyTarget, reply)
 
   withTenant(tenantId, (tx) =>
     saveInteractionPair(tx, tenantId, phone, messageText, reply, intent.action, contextRecord.interactionLog)
