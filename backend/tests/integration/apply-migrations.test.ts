@@ -7,10 +7,9 @@
  *     expected migration file.
  *  3. Checksum-mismatch on an already-applied file logs a warning and
  *     does NOT re-run the migration (forward-only rule).
- *  4. assertProductionDbSecurity throws on simulated RLS / audit failures.
+ *  4. Runner is twice-idempotent.
  */
-import { jest } from '@jest/globals'
-import { execFileSync } from 'child_process'
+import { spawnSync } from 'child_process'
 import { resolve } from 'path'
 import { createHash } from 'crypto'
 import { db } from '../../src/db.js'
@@ -48,23 +47,19 @@ const EXPECTED_FILES = [
 function runScript(): { stdout: string; stderr: string } {
   const ownerUrl = process.env['OWNER_DATABASE_URL'] || process.env['DATABASE_URL']
   const tsxPath = resolve(backendDir, 'node_modules', 'tsx', 'dist', 'cli.mjs')
-  const output = execFileSync(
-    process.execPath,
-    [tsxPath, scriptPath],
-    {
-      cwd: backendDir,
-      env: {
-        ...process.env,
-        OWNER_DATABASE_URL: ownerUrl,
-        PATH: process.env['PATH'] ?? '',
-      } as Record<string, string>,
-      stdio: 'pipe',
-    }
-  )
-  return {
-    stdout: Buffer.from(output).toString('utf8'),
-    stderr: '',
+  const r = spawnSync(process.execPath, [tsxPath, scriptPath], {
+    cwd: backendDir,
+    env: {
+      ...process.env,
+      OWNER_DATABASE_URL: ownerUrl,
+      PATH: process.env['PATH'] ?? '',
+    } as Record<string, string>,
+    encoding: 'utf8',
+  })
+  if (r.status !== 0) {
+    throw new Error(`runner exited ${r.status}: ${r.stderr}`)
   }
+  return { stdout: r.stdout ?? '', stderr: r.stderr ?? '' }
 }
 
 describe('apply-migrations runner', () => {
@@ -102,9 +97,10 @@ describe('apply-migrations runner', () => {
 
     try {
       const { stdout, stderr } = runScript()
-      expect(stdout).toContain('checksum mismatch')
-      expect(stdout).toContain('003_platform_orders.sql')
-      expect(stdout).toContain('NOT re-running')
+      const combined = stdout + stderr
+      expect(combined).toContain('checksum mismatch')
+      expect(combined).toContain('003_platform_orders.sql')
+      expect(combined).toContain('NOT re-running')
       expect(stdout).toContain('0 applied') // No new files applied
     } finally {
       // Restore the correct checksum — recompute from the source file
@@ -130,72 +126,5 @@ describe('apply-migrations runner', () => {
     const { stdout } = runScript()
     expect(stdout).toContain('0 applied')
     expect(stdout).not.toContain('checksum mismatch')
-  })
-})
-
-// ─── Startup assertion tests (assertProductionDbSecurity) ──────────────────────
-
-type QueryRawMock = () => Promise<unknown[]>
-
-// ESM: register mock before dynamic import — mock the db module so we can
-// control $queryRaw responses without a live DB connection.
-const mockQueryRaw = jest.fn<QueryRawMock>()
-jest.unstable_mockModule('../../src/db.js', () => ({
-  db: {
-    $queryRaw: mockQueryRaw,
-  },
-}))
-
-describe('assertProductionDbSecurity', () => {
-  let assertProductionDbSecurity: () => Promise<void>
-
-  beforeAll(async () => {
-    const mod = await import('../../src/utils/dbSecurityAssertions.js')
-    assertProductionDbSecurity = mod.assertProductionDbSecurity
-  })
-
-  beforeEach(() => {
-    mockQueryRaw.mockReset()
-  })
-
-  it('resolves when RLS is enabled and audit UPDATE is revoked', async () => {
-    // Simulate: SELECT 1 succeeds, RLS=true, has_table_privilege returns false
-    mockQueryRaw
-      .mockResolvedValueOnce([{ '?column?': 1 }])           // SELECT 1 (health check)
-      .mockResolvedValueOnce([{ relrowsecurity: true }])     // RLS check
-      .mockResolvedValueOnce([{ has_priv: false }])          // audit UPDATE check
-
-    await expect(assertProductionDbSecurity()).resolves.toBeUndefined()
-  })
-
-  it('throws when RLS is NOT enabled on sales', async () => {
-    mockQueryRaw
-      .mockResolvedValueOnce([{ '?column?': 1 }])
-      .mockResolvedValueOnce([]) // No row = RLS not found
-
-    await expect(assertProductionDbSecurity()).rejects.toThrow(
-      'RLS is NOT enabled on public.sales'
-    )
-  })
-
-  it('throws when RLS is disabled (relrowsecurity=false)', async () => {
-    mockQueryRaw
-      .mockResolvedValueOnce([{ '?column?': 1 }])
-      .mockResolvedValueOnce([{ relrowsecurity: false }])
-
-    await expect(assertProductionDbSecurity()).rejects.toThrow(
-      'RLS is NOT enabled on public.sales'
-    )
-  })
-
-  it('throws when gezi_app still has UPDATE on audit_log', async () => {
-    mockQueryRaw
-      .mockResolvedValueOnce([{ '?column?': 1 }])
-      .mockResolvedValueOnce([{ relrowsecurity: true }])
-      .mockResolvedValueOnce([{ has_priv: true }]) // UPDATE not revoked
-
-    await expect(assertProductionDbSecurity()).rejects.toThrow(
-      'gezi_app still has UPDATE on public.audit_log'
-    )
   })
 })

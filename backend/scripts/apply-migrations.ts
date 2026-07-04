@@ -100,14 +100,35 @@ CREATE TABLE IF NOT EXISTS public.applied_migrations (
 `
 
 /**
- * Validate that the migration directory contains every file we expect.
- * Missing files are a build/config error — fail fast.
+ * Validate that the migration directory contains every file we expect
+ * AND that no unregistered migration files exist on disk.
+ * Both directions: missing expected files AND unregistered new files
+ * are fatal build/config errors — fail fast.
  */
 function validateFileList(): void {
   const onDisk = new Set(readdirSync(migDir))
   const missing = MIGRATION_FILES.filter((f) => !onDisk.has(f))
   if (missing.length > 0) {
     console.error(`[apply-migrations] FATAL — migration files missing: ${missing.join(', ')}`)
+    process.exit(1)
+  }
+
+  // Reverse: detect .sql files on disk that are neither registered nor
+  // in the known-exclusion list. Prevents silent drift (same footgun as
+  // globalSetup.cjs — see CLAUDE.md lessons).
+  const KNOWN_EXCLUDED = new Set([
+    '001_global_schema.sql',
+    '002_tenant_schema_template.sql',
+    '005_consolidate_data.sql',
+  ])
+  const listed = new Set(MIGRATION_FILES)
+  const stray = readdirSync(migDir)
+    .filter((f) => /^\d{3}_.*\.sql$/.test(f))
+    .filter((f) => !listed.has(f) && !KNOWN_EXCLUDED.has(f))
+  if (stray.length > 0) {
+    console.error(
+      `[apply-migrations] FATAL — migrations on disk not registered in runner: ${stray.join(', ')}`
+    )
     process.exit(1)
   }
 }
