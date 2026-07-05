@@ -5,7 +5,8 @@
     "inventory": "Bidhaa dukani",
     "customers": "Wateja",
     "reports": "Ripoti",
-    "settings": "Mipangilio"
+    "settings": "Mipangilio",
+    "expenses": "Gharama"
   },
   "shell": {
     "product": "Gezi AI",
@@ -175,10 +176,15 @@
     "weekly": "Muhtasari wa kila wiki, siku 30",
     "monthly": "Muhtasari wa kila mwezi",
     "sales": "Mauzo",
-    "purchases": "Manunuzi"
+    "purchases": "Manunuzi",
+    "expensesLink": "Tazama gharama"
   },
   "auth": {
-    "carrier": { "mtn": "MTN", "airtel": "Airtel", "unknown": "Mtandao" },
+    "carrier": {
+      "mtn": "MTN",
+      "airtel": "Airtel",
+      "unknown": "Mtandao"
+    },
     "login": {
       "eyebrow": "Kuingia salama kwenye wavuti",
       "title": "Ingia Gezi",
@@ -252,6 +258,42 @@
       "queueErrorDiscard": "Tupa",
       "queueErrorBody422": "Hakuna bidhaa za kutosha. Kagua bidhaa.",
       "queueErrorBody400": "Data si sahihi. Badilisha ujaribu tena."
+    },
+    "signup": {
+      "eyebrow": "Anza kwa kuingia salama",
+      "title": "Fungua akaunti ya Gezi",
+      "body": "Sajili akaunti ya mmiliki wa biashara. Baada ya signup, akaunti za wamiliki zinaweka ulinzi wa two-factor.",
+      "businessName": "Jina la biashara",
+      "ownerName": "Jina la mmiliki",
+      "ownerPhone": "Simu ya mmiliki",
+      "password": "Nenosiri",
+      "localeLabel": "Nchi na sarafu",
+      "localeValue": "Uganda ? UGX",
+      "showPassword": "Onyesha nenosiri",
+      "hidePassword": "Ficha nenosiri",
+      "submit": "Fungua akaunti",
+      "creating": "Tunafungua akaunti",
+      "error": "Hatukuweza kufungua akaunti hiyo. Kagua maelezo ujaribu tena.",
+      "phoneExists": "Biashara tayari imesajiliwa kwa nambari hiyo.",
+      "rateLimited": "Majaribio ni mengi kwa sasa. Subiri kidogo ujaribu tena.",
+      "hasAccount": "Una akaunti tayari?",
+      "loginLink": "Ingia",
+      "whatsappPath": "Baada ya setup, unaweza kuandika kwa WhatsApp: tuma 'sold 2 sugar 6k' kwa namba ya Gezi.",
+      "whatsappLink": "Fungua WhatsApp"
     }
+  },
+  "expenses": {
+    "title": "Gharama",
+    "total": "Gharama {{count}} katika muda huu",
+    "rangeClamped": "Muda wa tarehe umefungwa kwa siku 90.",
+    "errorTitle": "Hatukuweza kupakia gharama.",
+    "empty": "Hakuna gharama katika muda huu - tuma 'sold 2 sugar 6k' kwa namba ya Gezi.",
+    "name": "Gharama",
+    "amount": "Kiasi",
+    "frequency": "Mzunguko",
+    "lastPaid": "Ililipwa mwisho",
+    "nextDue": "Inayofuata",
+    "notes": "Maelezo",
+    "detailTitle": "Maelezo ya gharama"
   }
 }

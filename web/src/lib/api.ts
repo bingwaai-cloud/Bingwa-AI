@@ -34,6 +34,13 @@ export type LoginResponse = AuthSession & {
   twoFactorRequired?: true;
 };
 
+export type SignupRequest = {
+  businessName: string;
+  ownerName: string;
+  ownerPhone: string;
+  password: string;
+};
+
 export type TwoFactorSetupResponse = {
   provisioningUri: string;
 };
@@ -126,6 +133,10 @@ async function apiRequestInternal<T>(path: `/api/v1/${string}`, options: ApiRequ
   return envelope;
 }
 
+export async function signup(input: SignupRequest): Promise<AuthSession> {
+  return (await apiRequest<AuthSession>("/api/v1/auth/signup", { method: "POST", body: input })).data;
+}
+
 export async function login(phone: string, password: string): Promise<LoginResponse> {
   return (await apiRequest<LoginResponse>("/api/v1/auth/login", { method: "POST", body: { phone, password } })).data;
 }
@@ -181,6 +192,19 @@ export type PurchaseRecord = {
   totalPrice: number;
   source: ProvenanceSource;
   createdAt: string;
+};
+
+export type ExpenseRecord = {
+  id: string;
+  name: string;
+  amountUgx: number;
+  frequency: string;
+  dueDay: number | null;
+  lastPaidAt: string | null;
+  nextDueAt: string | null;
+  notes: string | null;
+  createdAt: string;
+  createdDay?: string;
 };
 
 export type InventoryItem = {
@@ -265,6 +289,10 @@ export async function listPurchases(params: ListParams = {}): Promise<ApiSuccess
   return apiRequest<PurchaseRecord[]>(`/api/v1/purchases${queryString(params)}` as `/api/v1/${string}`);
 }
 
+export async function listExpenses(params: Pick<ListParams, "from" | "to" | "page" | "perPage"> = {}): Promise<ApiSuccess<ExpenseRecord[]>> {
+  return apiRequest<ExpenseRecord[]>(`/api/v1/expenses${queryString(params)}` as `/api/v1/${string}`);
+}
+
 export async function listLowStockItems(): Promise<InventoryItem[]> {
   return (await apiRequest<InventoryItem[]>("/api/v1/inventory/low-stock")).data;
 }
@@ -337,3 +365,5 @@ export async function cancelDraft(id: string): Promise<DraftRecord> {
     method: "POST"
   })).data;
 }
+
+

@@ -5,7 +5,8 @@
     "inventory": "Inventory",
     "customers": "Customers",
     "reports": "Reports",
-    "settings": "Settings"
+    "settings": "Settings",
+    "expenses": "Expenses"
   },
   "shell": {
     "product": "Gezi AI",
@@ -175,10 +176,15 @@
     "weekly": "Weekly summary, 30 days",
     "monthly": "Monthly summary",
     "sales": "Sales",
-    "purchases": "Purchases"
+    "purchases": "Purchases",
+    "expensesLink": "View expenses"
   },
   "auth": {
-    "carrier": { "mtn": "MTN", "airtel": "Airtel", "unknown": "Carrier" },
+    "carrier": {
+      "mtn": "MTN",
+      "airtel": "Airtel",
+      "unknown": "Carrier"
+    },
     "login": {
       "eyebrow": "Secure web access",
       "title": "Sign in to Gezi",
@@ -252,6 +258,42 @@
       "queueErrorDiscard": "Discard",
       "queueErrorBody422": "Not enough stock. Check inventory.",
       "queueErrorBody400": "Invalid data. Edit and try again."
+    },
+    "signup": {
+      "eyebrow": "Start with secure web access",
+      "title": "Create your Gezi account",
+      "body": "Register your business owner account. After signup, owner accounts set up two-factor security before using the dashboard.",
+      "businessName": "Business name",
+      "ownerName": "Owner name",
+      "ownerPhone": "Owner phone",
+      "password": "Password",
+      "localeLabel": "Country and currency",
+      "localeValue": "Uganda ? UGX",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
+      "submit": "Create account",
+      "creating": "Creating account",
+      "error": "We couldn't create that account. Check the details and try again.",
+      "phoneExists": "A business is already registered with that phone number.",
+      "rateLimited": "Too many tries right now. Please wait a little and try again.",
+      "hasAccount": "Already have an account?",
+      "loginLink": "Sign in",
+      "whatsappPath": "After setup, you can record from WhatsApp: send 'sold 2 sugar 6k' to your Gezi number.",
+      "whatsappLink": "Open WhatsApp"
     }
+  },
+  "expenses": {
+    "title": "Expenses",
+    "total": "{{count}} expenses in this range",
+    "rangeClamped": "Date ranges are capped at 90 days.",
+    "errorTitle": "We couldn't load expenses.",
+    "empty": "No expenses in this range - send 'sold 2 sugar 6k' to your Gezi number.",
+    "name": "Expense",
+    "amount": "Amount",
+    "frequency": "Frequency",
+    "lastPaid": "Last paid",
+    "nextDue": "Next due",
+    "notes": "Notes",
+    "detailTitle": "Expense detail"
   }
 }

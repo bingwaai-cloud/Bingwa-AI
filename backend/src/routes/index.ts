@@ -11,39 +11,40 @@ import { customersRouter } from './customers.js'
 import { marketingRouter } from './marketing.js'
 import { ordersRouter } from './orders.js'
 import { draftsRouter } from './drafts.js'
+import { expensesRouter } from './expenses.js'
 import { authenticate } from '../middleware/auth.js'
 import { tenantMiddleware } from '../middleware/tenant.js'
 import { graceMiddleware } from '../middleware/grace.js'
 
 /**
- * Root API router — all routes under /api.
+ * Root API router â€” all routes under /api.
  *
  * Structure:
- *   /api/health              — public, no auth
- *   /api/webhook             — public, Meta signature-verified
- *   /api/v1/auth/*           — public auth endpoints (signup, login, refresh, logout)
- *   /api/v1/sales/*          — authenticated + tenant-scoped
- *   /api/v1/inventory/*      — authenticated + tenant-scoped
- *   /api/v1/purchases/*      — authenticated + tenant-scoped
- *   /api/v1/suppliers/*      — authenticated + tenant-scoped
- *   /api/v1/payments/*       — authenticated + tenant-scoped
+ *   /api/health              â€” public, no auth
+ *   /api/webhook             â€” public, Meta signature-verified
+ *   /api/v1/auth/*           â€” public auth endpoints (signup, login, refresh, logout)
+ *   /api/v1/sales/*          â€” authenticated + tenant-scoped
+ *   /api/v1/inventory/*      â€” authenticated + tenant-scoped
+ *   /api/v1/purchases/*      â€” authenticated + tenant-scoped
+ *   /api/v1/suppliers/*      â€” authenticated + tenant-scoped
+ *   /api/v1/payments/*       â€” authenticated + tenant-scoped
  */
 export const apiRouter = Router()
 
-// ─── Public routes ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Public routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 apiRouter.use('/', healthRouter)
 apiRouter.use('/', webhookRouter)
 apiRouter.use('/v1/auth', authRouter)
 
-// Payment provider callback — public, no JWT.
+// Payment provider callback â€” public, no JWT.
 // Xente (WP-25b, sole provider):
 //   POST /api/payments/xente/callback/:token
 // WP-25b: legacy MTN/Airtel callbacks and Flutterwave callback have been
-// REMOVED — only Xente remains mounted. Any other path returns 404.
+// REMOVED â€” only Xente remains mounted. Any other path returns 404.
 apiRouter.use('/payments', xenteCallbackRouter)
 
-// ─── Authenticated + tenant-scoped routes ────────────────────────────────────
+// â”€â”€â”€ Authenticated + tenant-scoped routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 apiRouter.use('/v1/sales',      authenticate, tenantMiddleware, graceMiddleware, salesRouter)
 apiRouter.use('/v1/inventory',  authenticate, tenantMiddleware, inventoryRouter)
@@ -54,6 +55,7 @@ apiRouter.use('/v1/customers',  authenticate, tenantMiddleware, customersRouter)
 apiRouter.use('/v1/marketing',  authenticate, tenantMiddleware, marketingRouter)
 apiRouter.use('/v1/orders',     authenticate, tenantMiddleware, ordersRouter)
 apiRouter.use('/v1/drafts',     authenticate, tenantMiddleware, draftsRouter)
+apiRouter.use('/v1/expenses',  authenticate, tenantMiddleware, expensesRouter)
 
 // Export middleware for use in future module routes
 export { authenticate, tenantMiddleware }

@@ -7,6 +7,7 @@ import i18n from "i18next";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CustomersPage } from "./CustomersPage";
+import { ExpensesPage } from "./ExpensesPage";
 import { InventoryPage } from "./InventoryPage";
 import { ReportsPage } from "./ReportsPage";
 import { SalesPage } from "./SalesPage";
@@ -65,6 +66,19 @@ const inventoryItem = {
   lastSoldAt: "2026-06-30T08:32:00.000Z"
 };
 
+
+const expense = {
+  id: "expense-1",
+  name: "Rent",
+  amountUgx: 500000,
+  frequency: "monthly",
+  dueDay: null,
+  lastPaidAt: "2026-06-30T08:32:00.000Z",
+  nextDueAt: null,
+  notes: null,
+  createdAt: "2026-06-30T08:32:00.000Z",
+  createdDay: "2026-06-29T21:00:00.000Z"
+};
 const customer = {
   id: "customer-1",
   name: "Nakato",
@@ -82,6 +96,7 @@ describe("read-only module pages", () => {
   beforeEach(() => {
     Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:csv") });
     Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
   });
 
   afterEach(async () => {
@@ -89,6 +104,36 @@ describe("read-only module pages", () => {
     vi.unstubAllGlobals();
   });
 
+
+  it("lists expenses with date filters and exports all pages without provenance", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), "http://localhost");
+      if (url.pathname === "/api/v1/expenses") {
+        const perPage = Number(url.searchParams.get("perPage"));
+        const page = Number(url.searchParams.get("page"));
+        if (perPage === 20) return envelope([expense], { total: 101, page: 1, perPage: 20 });
+        if (page === 1) return envelope([{ ...expense, id: "expense-export-1" }], { total: 101, page: 1, perPage: 100 });
+        if (page === 2) return envelope([{ ...expense, id: "expense-export-2" }], { total: 101, page: 2, perPage: 100 });
+      }
+      throw new Error(`Unexpected request ${url.pathname}${url.search}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithClient(<ExpensesPage />);
+
+    expect(await screen.findByText("Expenses")).toBeInTheDocument();
+    expect(screen.getByText("Rent")).toBeInTheDocument();
+    expect(screen.queryByText("Source")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+
+    await waitFor(() => {
+      const exportCalls = fetchMock.mock.calls
+        .map(([input]) => new URL(String(input), "http://localhost"))
+        .filter((url) => url.pathname === "/api/v1/expenses" && url.searchParams.get("perPage") === "100");
+      expect(exportCalls.map((url) => url.searchParams.get("page"))).toEqual(["1", "2"]);
+      expect(exportCalls.every((url) => url.searchParams.has("from") && url.searchParams.has("to"))).toBe(true);
+    });
+  });
   it("exports the full filtered sales dataset, not only page one", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input), "http://localhost");
@@ -197,4 +242,6 @@ describe("read-only module pages", () => {
     expect(screen.getByText("Omugatte gw ebyagula")).toBeInTheDocument();
   });
 });
+
+
 

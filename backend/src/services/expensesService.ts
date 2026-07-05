@@ -6,7 +6,10 @@ import {
   createExpense,
   recordExpensePayment,
   findExpenses,
+  findExpensesPage,
   type Expense,
+  type ExpenseFilters,
+  type ExpensePage,
 } from '../repositories/expensesRepository.js'
 import { insertAuditLog } from '../utils/audit.js'
 
@@ -25,7 +28,7 @@ export interface ExpenseResult {
 
 /**
  * Record an expense payment. Existing name -> update; new name -> create.
- * Audit log INSERT is inside the same withTenant transaction — fails together.
+ * Audit log INSERT is inside the same withTenant transaction -- fails together.
  */
 export async function recordExpense(
   tenantId: string,
@@ -85,4 +88,8 @@ export async function recordExpenseInTransaction(
 
 export async function listExpenses(tenantId: string): Promise<Expense[]> {
   return withTenant(tenantId, (tx) => findExpenses(tx, tenantId))
+}
+
+export async function listExpensesPage(tenantId: string, filters: ExpenseFilters): Promise<ExpensePage> {
+  return withTenant(tenantId, (tx) => findExpensesPage(tx, tenantId, filters))
 }

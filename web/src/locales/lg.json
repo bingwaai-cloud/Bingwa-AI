@@ -5,7 +5,8 @@
     "inventory": "Sitooki y'ebintu",
     "customers": "Bakiriya",
     "reports": "Alipoota",
-    "settings": "Enteekateeka"
+    "settings": "Enteekateeka",
+    "expenses": "Ensaasaanya"
   },
   "shell": {
     "product": "Gezi AI",
@@ -175,10 +176,15 @@
     "weekly": "Alipoota ya buli wiiki, ennaku 30",
     "monthly": "Alipoota ya buli mwezi",
     "sales": "Ebitundiddwa",
-    "purchases": "Ebiguliddwa"
+    "purchases": "Ebiguliddwa",
+    "expensesLink": "Laba ensaasaanya"
   },
   "auth": {
-    "carrier": { "mtn": "MTN", "airtel": "Airtel", "unknown": "Omukutu" },
+    "carrier": {
+      "mtn": "MTN",
+      "airtel": "Airtel",
+      "unknown": "Omukutu"
+    },
     "login": {
       "eyebrow": "Okuyingira ku mukutu okukuume",
       "title": "Yingira mu Gezi",
@@ -252,6 +258,42 @@
       "queueErrorDiscard": "Suula",
       "queueErrorBody422": "Sitooki temala. Kebera sitooki.",
       "queueErrorBody400": "Data temala. Kyusa ogezeeko nate."
+    },
+    "signup": {
+      "eyebrow": "Tandika n okuyingira okukuume",
+      "title": "Tondawo akawunti ya Gezi",
+      "body": "Wandiisa akawunti ya nnannyini bizinensi. Oluvannyuma, bannannyini bizinensi bateekateeka obukuumi bwa two-factor.",
+      "businessName": "Erinnya lya bizinensi",
+      "ownerName": "Erinnya lya nnannyini",
+      "ownerPhone": "Essimu ya nnannyini",
+      "password": "Password",
+      "localeLabel": "Eggwanga ne ssente",
+      "localeValue": "Uganda ? UGX",
+      "showPassword": "Laga password",
+      "hidePassword": "Kweka password",
+      "submit": "Tondawo akawunti",
+      "creating": "Tutondawo akawunti",
+      "error": "Tetuyinza kutondawo akawunti. Kebera ebikwata ku yo ogezeeko nate.",
+      "phoneExists": "Bizinensi eri ku nnamba eyo yawandiisibwa dda.",
+      "rateLimited": "Wabaddewo okugezaako kungi kati. Lindako katono ogezeeko nate.",
+      "hasAccount": "Olina akawunti?",
+      "loginLink": "Yingira",
+      "whatsappPath": "Oluvannyuma lwa setup, osobola okuwandiika ku WhatsApp: weereza 'sold 2 sugar 6k' ku nnamba ya Gezi.",
+      "whatsappLink": "Ggulawo WhatsApp"
     }
+  },
+  "expenses": {
+    "title": "Ensaasaanya za bizinensi",
+    "total": "Ensaasaanya {{count}} mu kiseera kino",
+    "rangeClamped": "Ekiseera ky okulaga tekisukka nnaku 90.",
+    "errorTitle": "Tetuyinza kuleeta ensaasaanya kati.",
+    "empty": "Tewali nsaasaanya mu kiseera kino - weereza 'sold 2 sugar 6k' ku nnamba ya Gezi.",
+    "name": "Ensaasaanya",
+    "amount": "Omuwendo",
+    "frequency": "Emirundi",
+    "lastPaid": "Lwe yasembayo okusasulwa",
+    "nextDue": "Eddako okusasulwa",
+    "notes": "Ebyokuwandiika",
+    "detailTitle": "Ebisingawo ku nsaasaanya"
   }
 }

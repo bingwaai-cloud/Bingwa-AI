@@ -9,9 +9,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthProvider } from "./AuthContext";
 import { LoginPage } from "./LoginPage";
+import { SignupPage } from "./SignupPage";
 import { RequireAuth } from "./RequireAuth";
 import { TwoFactorChallengePage } from "./TwoFactorChallengePage";
 import { TwoFactorSetupPage } from "./TwoFactorSetupPage";
+import { AppShell } from "@/shell/AppShell";
 
 vi.mock("qrcode", () => ({
   toDataURL: vi.fn(async () => "data:image/png;base64,qr")
@@ -35,16 +37,27 @@ function renderAuth(initialEntries: string[], children: React.ReactNode): void {
       element: <AuthProvider>{children}<Outlet /></AuthProvider>,
       children: [
         { path: "/login", element: <LoginPage /> },
+        { path: "/signup", element: <SignupPage /> },
         { path: "/2fa", element: <TwoFactorChallengePage /> },
-        { path: "/settings/2fa", element: <RequireAuth />, children: [{ index: true, element: <TwoFactorSetupPage /> }] },
-        { path: "/today", element: <RequireAuth />, children: [{ index: true, element: <h1>Dashboard</h1> }] },
-        { path: "/", element: <RequireAuth />, children: [{ index: true, element: <h1>Dashboard</h1> }] }
+        {
+          element: <RequireAuth />,
+          children: [
+            {
+              path: "/",
+              element: <AppShell />,
+              children: [
+                { index: true, element: <h1>Dashboard</h1> },
+                { path: "today", element: <h1>Dashboard</h1> },
+                { path: "settings/2fa", element: <TwoFactorSetupPage /> }
+              ]
+            }
+          ]
+        }
       ]
     }
   ], { initialEntries });
   render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>);
 }
-
 describe("auth UI flow", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
@@ -58,6 +71,36 @@ describe("auth UI flow", () => {
     vi.unstubAllGlobals();
   });
 
+
+  it("signup creates an owner session and the existing 2FA guard shows setup", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), "http://localhost");
+      void init;
+      if (url.pathname === "/api/v1/auth/signup") return success({ tenant, user: { ...owner, totpEnabled: false } });
+      if (url.pathname === "/api/v1/auth/2fa/setup") return success({ provisioningUri: "otpauth://totp/Gezi?secret=ABC" });
+      throw new Error(`Unexpected request ${url.pathname}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderAuth(["/signup"], null);
+    fireEvent.change(screen.getByLabelText("Business name"), { target: { value: "Nakato Shop" } });
+    fireEvent.change(screen.getByLabelText("Owner name"), { target: { value: "Nakato" } });
+    fireEvent.change(screen.getByLabelText("Owner phone"), { target: { value: "0772123456" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "correct-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+    expect(await screen.findByText("Set up two-factor security")).toBeInTheDocument();
+    expect(await screen.findByAltText("Authenticator setup QR code")).toHaveAttribute("src", "data:image/png;base64,qr");
+    const signupCall = fetchMock.mock.calls.find(([input]) => new URL(String(input), "http://localhost").pathname === "/api/v1/auth/signup");
+    const signupInit = signupCall?.[1] as RequestInit | undefined;
+    expect(signupInit).toEqual(expect.objectContaining({ credentials: "include" }));
+    expect(JSON.parse(String(signupInit?.body))).toEqual({
+      businessName: "Nakato Shop",
+      ownerName: "Nakato",
+      ownerPhone: "+256772123456",
+      password: "correct-password"
+    });
+  });
   it("login returns 2fa_pending, challenge succeeds, and dashboard renders", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input), "http://localhost");
@@ -176,3 +219,8 @@ describe("auth UI flow", () => {
     expect(screen.getByRole("button", { name: "Yingira" })).toHaveClass("h-12");
   });
 });
+
+
+
+
+

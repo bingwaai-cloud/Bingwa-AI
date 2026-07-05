@@ -4,6 +4,7 @@ import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
 
 import { AuthProvider } from "@/features/auth/AuthContext";
 import { LoginPage } from "@/features/auth/LoginPage";
+import { SignupPage } from "@/features/auth/SignupPage";
 import { RequireAuth } from "@/features/auth/RequireAuth";
 import { TwoFactorChallengePage } from "@/features/auth/TwoFactorChallengePage";
 import { RequirePos } from "@/features/pos/RequirePos";
@@ -14,6 +15,7 @@ const SalesPage = lazy(() => import("@/features/modules/SalesPage").then((module
 const InventoryPage = lazy(() => import("@/features/modules/InventoryPage").then((module) => ({ default: module.InventoryPage })));
 const CustomersPage = lazy(() => import("@/features/modules/CustomersPage").then((module) => ({ default: module.CustomersPage })));
 const ReportsPage = lazy(() => import("@/features/modules/ReportsPage").then((module) => ({ default: module.ReportsPage })));
+const ExpensesPage = lazy(() => import("@/features/modules/ExpensesPage").then((module) => ({ default: module.ExpensesPage })));
 const SettingsPage = lazy(() => import("@/features/settings/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 const TwoFactorSetupPage = lazy(() => import("@/features/auth/TwoFactorSetupPage").then((module) => ({ default: module.TwoFactorSetupPage })));
 const PosPage = lazy(() => import("@/features/pos/PosPage").then((module) => ({ default: module.PosPage })));
@@ -31,6 +33,7 @@ export const router = createBrowserRouter([
     element: <AuthProvider><OutletRoot /></AuthProvider>,
     children: [
       { path: "/login", element: <LoginPage /> },
+      { path: "/signup", element: <SignupPage /> },
       { path: "/2fa", element: <TwoFactorChallengePage /> },
       {
         element: <RequireAuth />,
@@ -45,6 +48,7 @@ export const router = createBrowserRouter([
               { path: "inventory", element: lazyRoute(<InventoryPage />) },
               { path: "customers", element: lazyRoute(<CustomersPage />) },
               { path: "reports", element: lazyRoute(<ReportsPage />) },
+              { path: "expenses", element: lazyRoute(<ExpensesPage />) },
               { path: "settings", element: lazyRoute(<SettingsPage />) },
               { path: "settings/2fa", element: lazyRoute(<TwoFactorSetupPage />) }
             ]

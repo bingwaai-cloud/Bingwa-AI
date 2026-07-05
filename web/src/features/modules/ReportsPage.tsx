@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
 import { Money } from "@/components/Money";
+import { Button } from "@/components/ui/button";
 import { getPurchasesSummary, getSalesSummary, type SummaryResponse } from "@/lib/api";
 
 import { EmptyState, ErrorState, Field, PageHeader, SkeletonRows, rangeFromDays } from "./ModuleUtils";
@@ -71,7 +72,9 @@ export function ReportsPage(): React.ReactElement {
 
   return (
     <div className="space-y-4">
-      <PageHeader title={t("reports.title")} total={t("reports.total")} endpoint="GET /api/v1/sales/summary + GET /api/v1/purchases/summary" />
+      <PageHeader title={t("reports.title")} total={t("reports.total")} endpoint="GET /api/v1/sales/summary + GET /api/v1/purchases/summary">
+        <Button variant="secondary" asChild><a href="/expenses">{t("reports.expensesLink")}</a></Button>
+      </PageHeader>
       <section className="grid gap-3 sm:grid-cols-2">
         <Field label={t("reports.sales30")} value={<Money amount={salesTotal} size="card" tone="positive" />} money />
         <Field label={t("reports.purchases30")} value={<Money amount={purchasesTotal} size="card" />} money />
@@ -95,3 +98,5 @@ export function ReportsPage(): React.ReactElement {
     </div>
   );
 }
+
+
