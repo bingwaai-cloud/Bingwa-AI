@@ -28,7 +28,7 @@ const setProviderTxnId         = jest.fn(async () => undefined)
 const insertAuditLog = jest.fn<(tx: unknown, entry: { action: string }) => Promise<void>>(async () => undefined)
 const sendTextMessage = jest.fn(async () => undefined)
 
-const subFindFirst = jest.fn(async () => null)
+const subFindFirst = jest.fn<(...args: any[]) => Promise<any>>(async () => null)
 const subCreate    = jest.fn(async () => ({}))
 const subUpdate    = jest.fn(async () => ({}))
 const fakeTx = { subscription: { findFirst: subFindFirst, create: subCreate, update: subUpdate } }
@@ -174,5 +174,23 @@ describe('reconciliation sweep (WP-25)', () => {
     expect(markPaymentNeedsReview).toHaveBeenCalledWith('p1', fakeTx)
     expect(subCreate).not.toHaveBeenCalled()
     expect(auditActions()).toContain('payment.needs_review')
+  })
+})
+
+describe('auto-renewal (WP-25b)', () => {
+  test('renewal goes through initiateProviderPayment (Xente) — collection called + provider_txn_id persisted', async () => {
+    subFindFirst.mockResolvedValueOnce({ plan: 'basic', paymentPhone: '+256772000000', status: 'active' })
+    findRecentPendingPayment.mockResolvedValueOnce(null)
+    const p = makeProvider({ reference: '', providerRef: '', status: 'pending', amountUGX: 0, phone: null })
+    ;(p.initiateCollection as jest.Mock).mockImplementation(async (_ph, _amt, ref) => ({
+      reference: ref, providerRef: 'xen-renewal-99', status: 'pending',
+    }))
+
+    const { initiateAutoRenewal } = await import('../../../src/payments/paymentService.js')
+    await expect(initiateAutoRenewal('t1', p)).resolves.toBeUndefined()
+
+    expect(p.initiateCollection).toHaveBeenCalledTimes(1)
+    expect(setProviderTxnId).toHaveBeenCalledWith(expect.any(String), 'xen-renewal-99')
+    expect(createPaymentTransaction).toHaveBeenCalledTimes(1)
   })
 })

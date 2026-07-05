@@ -1,31 +1,37 @@
 /**
- * Provider registry (WP-10). Single place that maps the PAYMENT_PROVIDER env var
- * to a concrete PaymentProvider. Read at call time so switching providers is a
- * config change only, never a code change (CLAUDE.md vendor decision).
+ * Provider registry (WP-10 / WP-25b). Single place that maps the PAYMENT_PROVIDER
+ * env var to a concrete PaymentProvider. Read at call time so switching providers
+ * is a config change only, never a code change (CLAUDE.md vendor decision).
  *
- * WP-25: 'xente' is the cutover provider. 'flutterwave' stays selectable but
- * quarantined (like 'legacy') — removing it from the tree is a later cleanup.
+ * WP-25b: xente is now the SOLE provider. Legacy (direct MTN/Airtel clients) and
+ * Flutterwave (quarantined ex-cutover) have been REMOVED from the tree.
+ *
+ * HOW TO ADD A NEW COUNTRY PROVIDER (e.g. M-Pesa Kenya):
+ *   1. Implement PaymentProvider in a new file (e.g. ./mpesaProvider.ts).
+ *   2. Add it to the switch in getActivePaymentProvider() below.
+ *   3. Add its env validation block in utils/env.ts.
+ *   4. Update the env validation to allow the new value.
  */
 
 import type { PaymentProvider } from './PaymentProvider.js'
-import { flutterwaveProvider } from './flutterwaveProvider.js'
-import { legacyProvider } from './legacyProvider.js'
 import { xenteProvider } from './xenteProvider.js'
 
-export type PaymentProviderName = 'xente' | 'flutterwave' | 'legacy'
+export type PaymentProviderName = 'xente'
 
 export function selectedProviderName(): PaymentProviderName {
-  const raw = process.env['PAYMENT_PROVIDER'] ?? 'legacy'
+  const raw = (process.env['PAYMENT_PROVIDER'] ?? 'xente').trim().toLowerCase()
   if (raw === 'xente') return 'xente'
-  if (raw === 'flutterwave') return 'flutterwave'
-  return 'legacy'
+  // WP-25b: any value other than 'xente' is fatal at startup. There is no
+  // legacy or Flutterwave fallback — those providers have been removed.
+  throw new Error(
+    `FATAL: PAYMENT_PROVIDER must be 'xente' (got '${raw}'). ` +
+    `Other providers have been removed (WP-25b).`
+  )
 }
 
 /** The active PaymentProvider for this process/config. */
 export function getActivePaymentProvider(): PaymentProvider {
   switch (selectedProviderName()) {
-    case 'xente':       return xenteProvider
-    case 'flutterwave': return flutterwaveProvider
-    default:            return legacyProvider
+    case 'xente': return xenteProvider
   }
 }

@@ -1,6 +1,6 @@
 /**
  * WP-25 — XenteProvider unit tests (axios mocked; no network, no DB).
- * Mirrors flutterwaveProvider.test.ts and covers the four Xente deltas:
+ * Covers the four Xente deltas:
  * token cache (D1), IP-allowlist webhook auth (D2), re-query by
  * provider_txn_id (D3), decimal→integer UGX at the boundary (D4).
  */

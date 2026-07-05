@@ -25,7 +25,6 @@ export function validateEnv(): void {
     'WHATSAPP_PHONE_NUMBER_ID', 'WHATSAPP_VERIFY_TOKEN',
     'D360_API_KEY', 'D360_BASE_URL', 'D360_WEBHOOK_SECRET',
     'API_URL', 'WEB_ORIGINS', 'REPO_URL',
-    'MTN_MOMO_SUBSCRIPTION_KEY',
     'PAYMENT_PROVIDER',
     'XENTE_BASE_URL', 'XENTE_APP_KEY', 'XENTE_APP_PASSWORD', 'XENTE_USER_ID',
     'XENTE_IPN_ALLOWED_IPS', 'XENTE_IPN_PATH_TOKEN',
@@ -98,31 +97,32 @@ export function validateEnv(): void {
     }
   }
 
-  if ((process.env['PAYMENT_PROVIDER'] ?? 'legacy') === 'flutterwave') {
-    const flwRequired = ['FLW_SECRET_KEY', 'FLW_PUBLIC_KEY', 'FLW_WEBHOOK_HASH', 'FLW_ENCRYPTION_KEY']
-    const missingFlw = flwRequired.filter((k) => !process.env[k])
-    if (missingFlw.length > 0) {
-      console.error(`[startup] FATAL - PAYMENT_PROVIDER=flutterwave but missing: ${missingFlw.join(', ')}`)
-      process.exit(1)
-    }
+  // WP-25b: Xente is the sole provider. Legacy (direct MTN/Airtel) and
+  // Flutterwave providers have been removed from the tree. Any other
+  // PAYMENT_PROVIDER value is fatal at startup — there is no silent default.
+  const paymentProvider = (process.env['PAYMENT_PROVIDER'] ?? 'xente').trim().toLowerCase()
+  if (paymentProvider !== 'xente') {
+    console.error(
+      `[startup] FATAL - PAYMENT_PROVIDER must be 'xente' (got '${paymentProvider}'). ` +
+      `Other providers have been removed (WP-25b).`
+    )
+    process.exit(1)
   }
 
-  // WP-25: Xente cutover. XENTE_BASE_URL has a default (https://api.xente.co);
-  // everything else is fail-fast required — especially the IPN auth pair
-  // (allowlist + path token): Xente sends no signature, so a missing value
-  // here would mean an unauthenticated money webhook. Never boot like that.
-  if ((process.env['PAYMENT_PROVIDER'] ?? 'legacy') === 'xente') {
-    const xenteRequired = [
-      'XENTE_APP_KEY',
-      'XENTE_APP_PASSWORD',
-      'XENTE_USER_ID',
-      'XENTE_IPN_ALLOWED_IPS',
-      'XENTE_IPN_PATH_TOKEN',
-    ]
-    const missingXente = xenteRequired.filter((k) => !process.env[k])
-    if (missingXente.length > 0) {
-      console.error(`[startup] FATAL - PAYMENT_PROVIDER=xente but missing: ${missingXente.join(', ')}`)
-      process.exit(1)
-    }
+  // WP-25: Xente requires bearer-token auth. XENTE_BASE_URL has a default
+  // (https://api.xente.co); everything else is fail-fast — especially the IPN
+  // auth pair (allowlist + path token): Xente sends no signature, so missing
+  // values would mean an unauthenticated money webhook.
+  const xenteRequired = [
+    'XENTE_APP_KEY',
+    'XENTE_APP_PASSWORD',
+    'XENTE_USER_ID',
+    'XENTE_IPN_ALLOWED_IPS',
+    'XENTE_IPN_PATH_TOKEN',
+  ]
+  const missingXente = xenteRequired.filter((k) => !process.env[k])
+  if (missingXente.length > 0) {
+    console.error(`[startup] FATAL - PAYMENT_PROVIDER=xente but missing: ${missingXente.join(', ')}`)
+    process.exit(1)
   }
 }

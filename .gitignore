@@ -16,5 +16,8 @@ prisma/migrations/dev.db
 docs/Learn Luganda/*
 !docs/Learn Luganda/Gezi_AI_Luganda_Marketplace_Corpus_FINAL.xlsx
 *.inspect.ndjson
+# Untracked local Claude settings — never commit
+.claude/settings.local.json
+
 # Corrupted intake workbook — never commit (FUSE write damage)
 docs/Gezi_AI_Luganda_Corpus_Intake.xlsx

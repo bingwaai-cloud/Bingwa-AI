@@ -1,18 +1,18 @@
 /**
- * Payments API -- Integration tests (row-level tenancy).
+ * Payments API — Integration tests (row-level tenancy).
  *
- * Tests the full payment flow:
- *   - POST /api/v1/payments/initiate — trigger MoMo collection
+ * Tests the full payment flow via Xente (WP-25b, sole provider):
+ *   - POST /api/v1/payments/initiate — trigger USSD push
  *   - GET  /api/v1/payments/:id/status — poll for result
- *   - POST /api/payments/callback — MTN webhook processing
+ *   - POST /api/payments/xente/callback/:token — Xente IPN processing
  *
- * MTN API calls (axios) and WhatsApp sends are mocked so tests run offline.
+ * Xente API calls (axios) and WhatsApp sends are mocked so tests run offline.
  * Database is real (per testing.md — no DB mocks).
  *
  * ESM note: jest.mock() is not hoisted in ESM mode. Use jest.unstable_mockModule()
  * with dynamic imports for any module that transitively depends on a mocked module.
  *
- * Run: npm run test:api -- --testPathPattern payments
+ * Run: node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --testPathPattern payments
  */
 
 import { jest } from '@jest/globals'
@@ -21,12 +21,18 @@ import { db } from '../../src/db.js'
 import { createTestTenant, makeToken, cleanupTenant, type TestTenant } from '../fixtures/tenant.js'
 import type { Express } from 'express'
 
-process.env['PAYMENT_PROVIDER'] = 'legacy'
+process.env['PAYMENT_PROVIDER'] = 'xente'
+process.env['XENTE_BASE_URL'] = 'https://api.xente.co'
+process.env['XENTE_APP_KEY'] = 'test_app_key'
+process.env['XENTE_APP_PASSWORD'] = 'test_app_pw'
+process.env['XENTE_USER_ID'] = 'test_user'
+process.env['XENTE_IPN_ALLOWED_IPS'] = '52.48.24.237,34.252.29.119'
+process.env['XENTE_IPN_PATH_TOKEN'] = 'test-ipn-path-token-24chars'
 
 // ── Mock external I/O ─────────────────────────────────────────────────────────
 // Must be registered BEFORE any dynamic import of a module that uses them.
 
-// Mock axios — momoClient calls axios.post (token) + axios.post (requesttopay)
+// Mock axios — Xente provider calls POST (login) + POST (collection) + GET (re-query)
 jest.unstable_mockModule('axios', () => {
   class AxiosError extends Error {
     isAxiosError = true
@@ -50,7 +56,6 @@ jest.unstable_mockModule('../../src/channels/whatsapp/whatsappClient.js', () => 
 const { createApp }        = await import('../../src/app.js')
 const axiosModule          = await import('axios')
 const whatsappModule       = await import('../../src/channels/whatsapp/whatsappClient.js')
-const { _clearTokenCache } = await import('../../src/payments/momoClient.js')
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockedPost = (axiosModule.default as any).post as jest.MockedFunction<any>
@@ -62,6 +67,8 @@ const mockedSend = jest.mocked(whatsappModule.sendTextMessage)
 
 const TEST_TENANT_ID = 'c0ffee01-0000-0000-0000-000000000001'
 const TEST_PHONE     = '+256772100001'
+const PATH_TOKEN = 'test-ipn-path-token-24chars'
+const WHITELISTED_IP = '52.48.24.237'
 
 let tenant: TestTenant
 let token: string
@@ -91,17 +98,18 @@ afterAll(async () => {
 
 beforeEach(() => {
   jest.clearAllMocks()
-  _clearTokenCache()
 
-  // Default mock: MTN token endpoint returns a valid token
+  // Default mock: Xente login returns a valid token, collection returns pending
   mockedPost.mockImplementation(async (url: string) => {
-    if (url.includes('/token/')) {
-      return { data: { access_token: 'test-token-abc', token_type: 'Bearer', expires_in: 3600 }, status: 202 }
+    if (String(url).endsWith('/api/auth/login')) {
+      return { data: { success: true, Token: 'test-token-xente', refreshToken: 'rt' }, status: 200 }
     }
-    // Default: requesttopay returns 202 Accepted
-    return { data: {}, status: 202 }
+    if (String(url).includes('/collections/')) {
+      return { data: { code: 0, data: { transactionId: 'xen-1', requestId: 'any', status: 'PROCESSING' } }, status: 200 }
+    }
+    throw new Error(`unexpected POST ${String(url)}`)
   })
-  mockedGet.mockResolvedValue({ data: { status: 'PENDING' }, status: 200 })
+  mockedGet.mockResolvedValue({ data: { code: 0, data: { transactionId: 'xen-1', status: 'PROCESSING', amount: 50000 } }, status: 200 })
 })
 
 // ── POST /api/v1/payments/initiate ────────────────────────────────────────────
@@ -179,16 +187,19 @@ describe('POST /api/v1/payments/initiate', () => {
     expect(res.body.error.code).toBe('VALIDATION_ERROR')
   })
 
-  it('marks transaction failed when MTN API returns an error', async () => {
-    // Make MTN requesttopay call fail
+  it('marks transaction failed when Xente collection API returns an error', async () => {
+    // Make Xente collection call fail
     mockedPost.mockImplementation(async (url: string) => {
-      if (url.includes('/token/')) {
-        return { data: { access_token: 'test-token', token_type: 'Bearer', expires_in: 3600 }, status: 200 }
+      if (String(url).endsWith('/api/auth/login')) {
+        return { data: { success: true, Token: 'test-token', refreshToken: 'rt' }, status: 200 }
       }
-      throw Object.assign(new Error('MTN internal error'), {
-        isAxiosError: true,
-        response: { status: 500, data: { message: 'Internal server error' } },
-      })
+      if (String(url).includes('/collections/')) {
+        throw Object.assign(new Error('Xente internal error'), {
+          isAxiosError: true,
+          response: { status: 500, data: { message: 'Internal server error' } },
+        })
+      }
+      throw new Error(`unexpected POST ${String(url)}`)
     })
 
     const res = await request(app)
@@ -196,8 +207,13 @@ describe('POST /api/v1/payments/initiate', () => {
       .set('Authorization', `Bearer ${getToken()}`)
       .send({ plan: 'basic', phone: TEST_PHONE })
 
-    expect(res.status).toBe(502)
-    expect(res.body.error.code).toBe('PAYMENT_FAILED')
+    // Xente maps every upstream failure (login/collection/verify) to
+    // SERVICE_UNAVAILABLE/503 — a coherent provider contract. The legacy MTN
+    // client returned PAYMENT_FAILED/502; that expectation was carried over by
+    // mistake in the WP-25b rewrite. The substantive assertion — the tx is
+    // marked failed — is unchanged below.
+    expect(res.status).toBe(503)
+    expect(res.body.error.code).toBe('SERVICE_UNAVAILABLE')
 
     // Find and verify the failed transaction was created and marked failed
     const failedTx = await db.paymentTransaction.findFirst({
@@ -272,17 +288,34 @@ describe('GET /api/v1/payments/:id/status', () => {
   })
 })
 
-// ── POST /api/payments/callback ───────────────────────────────────────────────
+// ── POST /api/payments/xente/callback/:token ─────────────────────────────────
 
-describe('POST /api/payments/callback', () => {
+describe('POST /api/payments/xente/callback/:token', () => {
   const REF_ID = 'c0ffee99-0000-0000-0000-000000000001'
+  const XEN_TXN = 'xen-int-001'
+
+  function postIpn(body: object) {
+    return request(app)
+      .post(`/api/payments/xente/callback/${PATH_TOKEN}`)
+      .set('X-Forwarded-For', WHITELISTED_IP)
+      .send(body)
+  }
+
+  const settleWait = () => new Promise((resolve) => setTimeout(resolve, 400))
 
   beforeEach(async () => {
     await cleanupTenant(TEST_TENANT_ID)
     tenant = await createTestTenant({ id: TEST_TENANT_ID, ownerPhone: TEST_PHONE, businessName: 'Payment Test Shop' })
     token = makeToken(tenant)
 
-    // Create a pending transaction that the callback will resolve
+    mockedPost.mockImplementation(async (url: string) => {
+      if (String(url).endsWith('/api/auth/login')) {
+        return { data: { success: true, Token: 'tok_ipn_test', refreshToken: 'rt' }, status: 200 }
+      }
+      throw new Error(`unexpected POST ${String(url)}`)
+    })
+
+    // Create a pending transaction that the IPN will resolve
     await db.paymentTransaction.upsert({
       where: { id: REF_ID },
       update: { status: 'pending' },
@@ -291,6 +324,7 @@ describe('POST /api/payments/callback', () => {
         tenantId:          TEST_TENANT_ID,
         provider:          'mtn_momo',
         providerReference: REF_ID,
+        providerTxnId:     XEN_TXN,
         amountUgx:         50_000,
         status:            'pending',
         type:              'sub_basic',
@@ -304,37 +338,24 @@ describe('POST /api/payments/callback', () => {
     await db.subscription.deleteMany({ where: { tenantId: TEST_TENANT_ID } })
   })
 
-  it('responds 200 immediately (MTN 5s timeout requirement)', async () => {
-    const res = await request(app)
-      .post('/api/payments/callback')
-      .send({
-        referenceId: REF_ID,
-        status:      'SUCCESSFUL',
-        financialTransactionId: 'MTN-12345678',
-        amount:      '50000',
-      })
-
+  it('responds 200 immediately (Xente expects fast ack)', async () => {
+    mockedGet.mockResolvedValueOnce({
+      data: { code: 0, data: { transactionId: XEN_TXN, requestId: REF_ID, status: 'SUCCESS', amount: 50000 } },
+      status: 200,
+    })
+    const res = await postIpn({ transactionId: XEN_TXN, requestId: REF_ID, amount: 50000, statusMessage: 'SUCCESS' })
     expect(res.status).toBe(200)
     expect(res.body.received).toBe(true)
   })
 
-  it('activates subscription on SUCCESSFUL callback', async () => {
+  it('activates subscription on SUCCESSFUL re-query (WP-17 C-1: trusts ONLY re-query)', async () => {
     mockedGet.mockResolvedValueOnce({
-      data: { status: 'SUCCESSFUL', financialTransactionId: 'MTN-12345678', amount: '50000' },
+      data: { code: 0, data: { transactionId: XEN_TXN, requestId: REF_ID, status: 'SUCCESS', amount: 50000 } },
       status: 200,
     })
 
-    await request(app)
-      .post('/api/payments/callback')
-      .send({
-        referenceId: REF_ID,
-        status:      'SUCCESSFUL',
-        financialTransactionId: 'MTN-12345678',
-        amount:      '50000',
-      })
-
-    // Give setImmediate a chance to process
-    await new Promise((resolve) => setTimeout(resolve, 200))
+    await postIpn({ transactionId: XEN_TXN, requestId: REF_ID, amount: 50000, statusMessage: 'SUCCESS' })
+    await settleWait()
 
     // Transaction must be marked successful
     const tx = await db.paymentTransaction.findUnique({ where: { id: REF_ID } })
@@ -353,104 +374,94 @@ describe('POST /api/payments/callback', () => {
     expect(mockedSend).toHaveBeenCalledWith(TEST_PHONE, expect.stringContaining('Payment received'))
   })
 
-  it('marks transaction failed on FAILED callback and notifies user', async () => {
+  it('settles on the RE-QUERIED amount even when the IPN body lies (amount=1)', async () => {
     mockedGet.mockResolvedValueOnce({
-      data: { status: 'FAILED', reason: 'PAYER_NOT_FOUND' },
+      data: { code: 0, data: { transactionId: XEN_TXN, requestId: REF_ID, status: 'SUCCESS', amount: 50000 } },
       status: 200,
     })
 
-    await request(app)
-      .post('/api/payments/callback')
-      .send({
-        referenceId: REF_ID,
-        status:      'FAILED',
-        reason:      'PAYER_NOT_FOUND',
-      })
+    await postIpn({ transactionId: XEN_TXN, requestId: REF_ID, amount: 1, statusMessage: 'SUCCESS' })
+    await settleWait()
 
-    await new Promise((resolve) => setTimeout(resolve, 200))
-
+    // Must settle on the RE-QUERIED amount (50000), not the body's 1
     const tx = await db.paymentTransaction.findUnique({ where: { id: REF_ID } })
-    expect(tx?.status).toBe('failed')
-
-    // User notified with failure message and retry instruction
-    expect(mockedSend).toHaveBeenCalledWith(TEST_PHONE, expect.stringContaining('failed'))
-    expect(mockedSend).toHaveBeenCalledWith(TEST_PHONE, expect.stringContaining('PAY'))
+    expect(tx?.status).toBe('successful')
+    const sub = await db.subscription.findFirst({ where: { tenantId: TEST_TENANT_ID } })
+    expect(sub?.status).toBe('active')
   })
 
-  it('is idempotent — duplicate SUCCESSFUL callback does not double-activate', async () => {
-    mockedGet.mockResolvedValue({
-      data: { status: 'SUCCESSFUL', financialTransactionId: 'MTN-12345678', amount: '50000' },
-      status: 200,
-    })
-
-    const payload = {
-      referenceId: REF_ID,
-      status:      'SUCCESSFUL',
-      financialTransactionId: 'MTN-12345678',
-      amount:      '50000',
-    }
-
-    // Send callback twice
-    await request(app).post('/api/payments/callback').send(payload)
-    await new Promise((resolve) => setTimeout(resolve, 200))
-    await request(app).post('/api/payments/callback').send(payload)
-    await new Promise((resolve) => setTimeout(resolve, 200))
-
-    // Only one subscription should exist
-    const subs = await db.subscription.findMany({ where: { tenantId: TEST_TENANT_ID } })
-    expect(subs.length).toBe(1)
-
-    // WhatsApp message only sent once
-    expect(mockedSend).toHaveBeenCalledTimes(1)
-  })
-
-  it('silently ignores unknown referenceId', async () => {
-    const res = await request(app)
-      .post('/api/payments/callback')
-      .send({
-        referenceId: '00000000-0000-0000-0000-999999999999',
-        status:      'SUCCESSFUL',
-      })
-
-    await new Promise((resolve) => setTimeout(resolve, 200))
-
-    expect(res.status).toBe(200)
-    expect(mockedSend).not.toHaveBeenCalled()
-  })
-
-  it('returns 200 and drops malformed callback body', async () => {
-    const res = await request(app)
-      .post('/api/payments/callback')
-      .send({ garbage: true, noReferenceId: 'here' })
-
-    expect(res.status).toBe(200)
-    expect(mockedSend).not.toHaveBeenCalled()
-  })
-
-  it('rejects amount mismatch in production environment', async () => {
-    const originalEnv = process.env['MTN_MOMO_ENVIRONMENT']
-    process.env['MTN_MOMO_ENVIRONMENT'] = 'production'
+  it('re-queried amount mismatch → needs_review, subscription NOT activated', async () => {
     mockedGet.mockResolvedValueOnce({
-      data: { status: 'SUCCESSFUL', amount: '1000' },
+      data: { code: 0, data: { transactionId: XEN_TXN, requestId: REF_ID, status: 'SUCCESS', amount: 1000 } },
       status: 200,
     })
 
-    await request(app)
-      .post('/api/payments/callback')
-      .send({
-        referenceId: REF_ID,
-        status:      'SUCCESSFUL',
-        amount:      '1000',   // wrong — we expected 50000
-      })
-
-    await new Promise((resolve) => setTimeout(resolve, 200))
+    await postIpn({ transactionId: XEN_TXN, requestId: REF_ID, amount: 50000, statusMessage: 'SUCCESS' })
+    await settleWait()
 
     const tx = await db.paymentTransaction.findUnique({ where: { id: REF_ID } })
     expect(tx?.status).toBe('needs_review')
+    const sub = await db.subscription.findFirst({ where: { tenantId: TEST_TENANT_ID } })
+    expect(sub).toBeNull()
+  })
 
-    // User notified that the verified provider amount needs review.
-    expect(mockedSend).toHaveBeenCalledWith(TEST_PHONE, expect.stringContaining('needs checking'))
+  it('is idempotent — duplicate IPN after settlement does nothing', async () => {
+    mockedGet
+      .mockResolvedValueOnce({
+        data: { code: 0, data: { transactionId: XEN_TXN, requestId: REF_ID, status: 'SUCCESS', amount: 50000 } },
+        status: 200,
+      })
+    // Second get should NOT be called (short-circuited on status != pending)
 
-    process.env['MTN_MOMO_ENVIRONMENT'] = originalEnv
+    await postIpn({ transactionId: XEN_TXN, requestId: REF_ID, amount: 50000, statusMessage: 'SUCCESS' })
+    await settleWait()
+    mockedGet.mockClear()
+
+    await postIpn({ transactionId: XEN_TXN, requestId: REF_ID, amount: 50000, statusMessage: 'SUCCESS' })
+    await settleWait()
+
+    expect(mockedGet).not.toHaveBeenCalled()
+    const tx = await db.paymentTransaction.findUnique({ where: { id: REF_ID } })
+    expect(tx?.status).toBe('successful')
+    const subs = await db.subscription.findMany({ where: { tenantId: TEST_TENANT_ID } })
+    expect(subs).toHaveLength(1)
+  })
+
+  it('wrong path token → 401, no re-query, no processing', async () => {
+    await request(app)
+      .post('/api/payments/xente/callback/wrong-token')
+      .set('X-Forwarded-For', WHITELISTED_IP)
+      .send({ transactionId: XEN_TXN, requestId: REF_ID, amount: 50000, statusMessage: 'SUCCESS' })
+      .expect(401)
+    await settleWait()
+    expect(mockedGet).not.toHaveBeenCalled()
+    const tx = await db.paymentTransaction.findUnique({ where: { id: REF_ID } })
+    expect(tx?.status).toBe('pending')
+  })
+
+  it('non-whitelisted IP → 401, no re-query, no processing', async () => {
+    await request(app)
+      .post(`/api/payments/xente/callback/${PATH_TOKEN}`)
+      .set('X-Forwarded-For', '203.0.113.99')
+      .send({ transactionId: XEN_TXN, requestId: REF_ID, amount: 50000, statusMessage: 'SUCCESS' })
+      .expect(401)
+    await settleWait()
+    expect(mockedGet).not.toHaveBeenCalled()
+    const tx = await db.paymentTransaction.findUnique({ where: { id: REF_ID } })
+    expect(tx?.status).toBe('pending')
+  })
+
+  it('legacy MoMo callback path → 404', async () => {
+    const res = await request(app)
+      .post('/api/payments/callback')
+      .send({ referenceId: REF_ID, status: 'SUCCESSFUL' })
+    expect(res.status).toBe(404)
+  })
+
+  it('legacy Flutterwave callback path → 404', async () => {
+    const res = await request(app)
+      .post('/api/payments/flutterwave/callback')
+      .send({ event: 'charge.completed', data: {} })
+    expect(res.status).toBe(404)
   })
 })

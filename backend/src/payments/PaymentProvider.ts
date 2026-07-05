@@ -68,7 +68,7 @@ export class MissingProviderTxnIdError extends Error {
 }
 
 export interface PaymentProvider {
-  /** Stable identifier, e.g. 'flutterwave' | 'legacy'. Used in logs/audit. */
+  /** Stable identifier, e.g. 'xente'. Used in logs/audit. */
   readonly name: string
 
   /**

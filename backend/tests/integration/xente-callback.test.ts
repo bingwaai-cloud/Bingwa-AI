@@ -4,7 +4,7 @@
  *
  * Under PAYMENT_PROVIDER=xente:
  *   - legacy MoMo/Airtel callbacks are NOT mounted (404)
- *   - the xente callback IS mounted, flutterwave stays mounted (quarantined)
+ *   - the xente callback IS mounted; Flutterwave callback removed (WP-25b)
  *   - wrong path token → 401 BEFORE any processing
  *   - non-whitelisted source IP → 401 BEFORE any processing
  *   - a valid IPN settles by RE-QUERYING Xente: the body's amount is ignored,
@@ -133,9 +133,9 @@ describe('mounting under PAYMENT_PROVIDER=xente', () => {
     expect(res.status).toBe(404)
   })
 
-  it('flutterwave callback stays mounted (quarantined ex-cutover): 401 on bad hash, not 404', async () => {
+  it('flutterwave callback removed → 404 (WP-25b)', async () => {
     const res = await request(app).post('/api/payments/flutterwave/callback').send({ event: 'charge.completed', data: {} })
-    expect(res.status).toBe(401)
+    expect(res.status).toBe(404)
   })
 
   it('xente callback is mounted: 401 (auth), never 404', async () => {

@@ -15,7 +15,12 @@ describe('validateEnv WhatsApp provider selection', () => {
       DATABASE_URL: 'postgresql://test:test@localhost:5432/test',
       JWT_SECRET: 'test-jwt-secret',
       JWT_REFRESH_SECRET: 'test-refresh-secret',
-      PAYMENT_PROVIDER: 'legacy',
+      PAYMENT_PROVIDER: 'xente',
+      XENTE_APP_KEY: 'k',
+      XENTE_APP_PASSWORD: 'p',
+      XENTE_USER_ID: 'u',
+      XENTE_IPN_ALLOWED_IPS: '52.48.24.237,34.252.29.119',
+      XENTE_IPN_PATH_TOKEN: 'tok',
     }
     exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: string | number | null) => {
       throw new Error(`process.exit ${code}`)

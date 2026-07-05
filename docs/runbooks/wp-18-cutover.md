@@ -71,13 +71,12 @@ Set all values in the Railway dashboard (never in code). `validateEnv` fails
 fast on missing vars, so a missing secret will block boot — that's intended.
 
 **Payments (Xente — WP-25):**
-- [ ] `PAYMENT_PROVIDER=xente`  ← **critical: any non-`legacy` value 404s the legacy MoMo/Airtel callbacks. The WP-17 C-1/H-1 fix depends on it. Do not leave it `legacy`.**
+- [ ] `PAYMENT_PROVIDER=xente`  ← **critical: Xente is the sole provider (WP-25b). Legacy MTN/Airtel and Flutterwave providers have been removed.**
 - [ ] `XENTE_APP_KEY`, `XENTE_APP_PASSWORD`, `XENTE_USER_ID` = production account values.
 - [ ] `XENTE_IPN_ALLOWED_IPS=52.48.24.237,34.252.29.119` (Xente's published IPN IPs — re-confirm in their docs at cutover time).
 - [ ] `XENTE_IPN_PATH_TOKEN` = fresh 24+ byte random (`openssl rand -hex 24`); prod value ≠ staging value.
 - [ ] `XENTE_BASE_URL` correct (default `https://api.xente.co`).
 - [ ] PROD egress IP whitelisted in the Xente portal (their auth requires it; Railway static outbound IP).
-- [ ] (quarantined) Keep the old `FLW_*` values in place during the parallel-run window so late Flutterwave callbacks still verify + settle.
 
 **WhatsApp (360dialog live):**
 - [ ] `WA_PROVIDER=360dialog`
@@ -104,7 +103,6 @@ fast on missing vars, so a missing secret will block boot — that's intended.
 - [ ] Deploy main via Railway. Restart API + worker so `xenteConfig()` / env validation read the new values.
 - [ ] `GET /api/health` → 200 (server + database `ok`).
 - [ ] Register / verify the **production** Xente IPN URL (WITH path token): `https://api.<domain>/api/payments/xente/callback/<XENTE_IPN_PATH_TOKEN>`. Send a test IPN from Xente → 200; a wrong-path-token call → 401; a call from a non-whitelisted IP → 401.
-- [ ] (quarantined) Leave the Flutterwave webhook registration in place for the parallel-run window: `https://api.<domain>/api/payments/flutterwave/callback` still verifies `verif-hash` and settles idempotently.
 - [ ] Point the 360dialog live number's webhook at the prod endpoint; confirm Basic-auth verification passes and a wrong secret is rejected.
 
 ---
@@ -126,11 +124,10 @@ Both green = WP-18 functional acceptance met.
 
 ---
 
-## Phase 5 — Parallel-run window & monitoring (first 24–48h)
+## Phase 5 — Monitoring (first 24–48h)
 
-- [ ] Keep the OLD Flutterwave webhook/keys **accepting** for 24–48h so late callbacks for pre-cutover charges still settle (handler is idempotent → safe no-op; the flutterwave callback route stays mounted by design).
 - [ ] UptimeRobot pinging `/api/health` every 5 min; alert wired.
-- [ ] Watch: payment success rate, `status='needs_review'` count (investigate any — WP-25 adds `missing_provider_txn_id` as a needs_review reason), `provider_webhook_*` / `xente_*` / `flw_*` log events, timeout-sweep audit entries.
+- [ ] Watch: payment success rate, `status='needs_review'` count (investigate any — WP-25 adds `missing_provider_txn_id` as a needs_review reason), `provider_webhook_*` / `xente_*` log events, timeout-sweep audit entries.
 - [ ] Watch 360dialog quality rating (first-class metric); confirm the hourly quality monitor + auto-pause is running.
 - [ ] Confirm no `pending` payment rows older than the 10-min timeout window after one sweep cycle.
 
@@ -138,16 +135,15 @@ Both green = WP-18 functional acceptance met.
 
 ## Phase 6 — Finalize
 
-- [ ] After the parallel-run window is clean AND no `pending` pre-cutover Flutterwave rows remain: revoke the FLW keys and remove any `FLW_*_NEXT` staging secrets. (Deleting `flutterwaveProvider` from the tree is a later cleanup WP — not part of this cutover.)
-- [ ] Tag the release: `git tag v1-integration-ready && git push origin v1-integration-ready`.
+- [ ] After the monitoring window is clean: tag the release. `git tag v1-integration-ready && git push origin v1-integration-ready`.
 - [ ] Update status docs / memory: Phase 5 complete, live.
 
 ---
 
 ## Rollback (if anything misbehaves)
 
-- **Payments:** set `PAYMENT_PROVIDER=flutterwave` (its keys are still in place during the window) and restart — the registry seam makes the vendor a config value. Config-only → minutes, no code deploy. `payment_transactions` is unaffected.
 - **App:** Railway → Deployments → Rollback to the previous deploy (≈30s).
+- **Payments:** the old Flutterwave keys and direct MTN/Airtel clients no longer exist in the tree (WP-25b). Rollback to a prior git tag if needed.
 - **WhatsApp:** if the shared 360dialog number degrades, follow the second-number runbook; broadcasts auto-pause on quality drop.
 
 ---

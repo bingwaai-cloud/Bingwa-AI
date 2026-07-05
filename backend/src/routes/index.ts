@@ -6,7 +6,7 @@ import { salesRouter } from './sales.js'
 import { inventoryRouter } from './inventory.js'
 import { purchasesRouter } from './purchases.js'
 import { suppliersRouter } from './suppliers.js'
-import { paymentsRouter, paymentCallbackRouter, flutterwaveCallbackRouter, xenteCallbackRouter } from './payments.js'
+import { paymentsRouter, xenteCallbackRouter } from './payments.js'
 import { customersRouter } from './customers.js'
 import { marketingRouter } from './marketing.js'
 import { ordersRouter } from './orders.js'
@@ -21,7 +21,6 @@ import { graceMiddleware } from '../middleware/grace.js'
  * Structure:
  *   /api/health              — public, no auth
  *   /api/webhook             — public, Meta signature-verified
- *   /api/payments/callback   — public, MTN MoMo webhook
  *   /api/v1/auth/*           — public auth endpoints (signup, login, refresh, logout)
  *   /api/v1/sales/*          — authenticated + tenant-scoped
  *   /api/v1/inventory/*      — authenticated + tenant-scoped
@@ -37,23 +36,12 @@ apiRouter.use('/', healthRouter)
 apiRouter.use('/', webhookRouter)
 apiRouter.use('/v1/auth', authRouter)
 
-// Payment provider callbacks — public, no JWT.
-// Xente (WP-25, the cutover provider) and Flutterwave (quarantined ex-cutover;
-// late callbacks must still settle) are ALWAYS mounted:
+// Payment provider callback — public, no JWT.
+// Xente (WP-25b, sole provider):
 //   POST /api/payments/xente/callback/:token
-//   POST /api/payments/flutterwave/callback
+// WP-25b: legacy MTN/Airtel callbacks and Flutterwave callback have been
+// REMOVED — only Xente remains mounted. Any other path returns 404.
 apiRouter.use('/payments', xenteCallbackRouter)
-apiRouter.use('/payments', flutterwaveCallbackRouter)
-
-// WP-17 C-1/H-1: the LEGACY MTN/Airtel callbacks act on a provider-posted
-// callback and must NOT be reachable under the Flutterwave cutover. Mount them
-// ONLY when PAYMENT_PROVIDER=legacy; otherwise POST /api/payments/callback and
-// POST /api/payments/airtel/callback fall through to the 404 handler.
-//   MTN MoMo:     POST /api/payments/callback
-//   Airtel Money: POST /api/payments/airtel/callback
-if ((process.env['PAYMENT_PROVIDER'] ?? 'legacy') === 'legacy') {
-  apiRouter.use('/payments', paymentCallbackRouter)
-}
 
 // ─── Authenticated + tenant-scoped routes ────────────────────────────────────
 

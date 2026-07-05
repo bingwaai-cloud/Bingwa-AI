@@ -12,12 +12,9 @@ import {
 } from '../reports/reportService.js'
 import { runReconciliation } from './reconciliation.js'
 import {
-  checkPendingPaymentTimeout,
-  checkPendingAirtelPaymentTimeout,
   checkPendingPaymentTimeoutVia,
   initiateAutoRenewal,
 } from '../payments/paymentService.js'
-import { selectedProviderName } from '../payments/providerRegistry.js'
 import { getQualityProvider } from '../channels/whatsapp/whatsappQualityProvider.js'
 import { setBroadcastsPaused } from '../services/marketingService.js'
 
@@ -278,12 +275,8 @@ export function startScheduler(): void {
   cron.schedule(
     '*/15 * * * *',
     () => {
-      // Provider-agnostic sweep when a PaymentProvider is configured (WP-10);
-      // legacy per-rail sweeps otherwise.
-      const sweep = selectedProviderName() === 'flutterwave'
-        ? checkPendingPaymentTimeoutVia()
-        : Promise.all([checkPendingPaymentTimeout(), checkPendingAirtelPaymentTimeout()])
-      void Promise.resolve(sweep).catch((err) => {
+      // WP-25b: Xente is the sole provider — always use the provider-agnostic sweep.
+      void Promise.resolve(checkPendingPaymentTimeoutVia()).catch((err) => {
         logger.error({ event: 'payment_timeout_job_failed', err })
       })
     },

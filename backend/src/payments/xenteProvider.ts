@@ -1,7 +1,8 @@
 /**
  * XenteProvider — PaymentProvider implementation for mobile-money Uganda
  * (MTN + Airtel through the Xente API). WP-25: the cutover provider,
- * replacing Flutterwave (which stays in the tree, quarantined like legacy).
+ * replacing Flutterwave. WP-25b: Flutterwave and the legacy direct MTN/Airtel
+ * clients have been REMOVED from the tree — Xente is the sole provider.
  *
  * Four deltas vs Flutterwave, designed around here:
  *   D1  AUTH: POST {base}/api/auth/login {appKey, appPassword, userId} → bearer

@@ -41,13 +41,6 @@ jest.unstable_mockModule('../../src/channels/whatsapp/whatsappClient.js', () => 
   getWhatsAppProvider: jest.fn(() => 'meta'),
 }))
 
-// Mock MoMo client (prevents real MTN network calls in whitelist test)
-jest.unstable_mockModule('../../src/payments/momoClient.js', () => ({
-  initiateCollection: jest.fn<() => Promise<{ status: string; referenceId: string }>>().mockResolvedValue({ status: 'PENDING', referenceId: 'mock-ref' }),
-  getCollectionStatus: jest.fn<() => Promise<{ status: string }>>().mockResolvedValue({ status: 'PENDING' }),
-  _clearTokenCache: jest.fn(),
-}))
-
 // Mock providerRegistry for reconciliation tests — getTransaction is provided
 // per-test via a mutable mock that each test replaces.
 const mockGetTransaction = jest.fn<() => Promise<ProviderTransaction>>()
@@ -137,7 +130,7 @@ async function seedPaymentRow(overrides: {
     data: {
       id:                overrides.id ?? crypto.randomUUID(),
       tenantId:          overrides.tenantId,
-      provider:          overrides.provider ?? 'flutterwave',
+      provider:          overrides.provider ?? 'xente',
       providerReference: overrides.providerReference ?? crypto.randomUUID(),
       amountUgx:         overrides.amountUgx ?? 50_000,
       status:            overrides.status ?? 'pending',

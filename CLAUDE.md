@@ -35,9 +35,8 @@ the web dashboard follows fast as the full ERP surface.
   Xente specifics: bearer-token auth (60-min TTL, cached in-process); IPN has NO
   signature — auth = source-IP allowlist + secret path token, and settlement
   ALWAYS re-queries by provider_txn_id (never trusts the IPN body).
-  flutterwaveProvider and the direct MTN/Airtel clients stay in the tree
-  quarantined (selectable by env for late-callback settlement); deleting them is
-  a later cleanup.
+  WP-25b: Flutterwave and the direct MTN/Airtel clients have been REMOVED from
+  the tree. Xente is the sole provider.
 
 ## Tech stack
 - Backend: Node.js + Express + TypeScript (strict)
@@ -45,7 +44,7 @@ the web dashboard follows fast as the full ERP surface.
   schema-per-tenant; see .claude/rules/multi-tenant.md)
 - AI/NLP runtime: Claude API — claude-sonnet for parsing (model id in env, never hardcoded)
 - WhatsApp: 360dialog (Cloud API-compatible payloads)
-- Payments: Xente (behind PaymentProvider interface; Flutterwave + legacy clients quarantined)
+- Payments: Xente (sole provider as of WP-25b)
 - Auth: JWT + refresh tokens; 2FA for web owner accounts
 - Web: React + TypeScript + Tailwind + shadcn/ui (tokenized theme), mobile-first PWA
 - ORM: Prisma | Validation: Zod | Testing: Jest + Supertest
@@ -60,7 +59,7 @@ gezi-ai/  (folder currently named bingwa-ai)
     routes/ controllers/ services/ repositories/ middleware/
     nlp/          — intent parsing engine
     channels/     — WhatsApp (and future Telegram/USSD) adapters  [rename of whatsapp/]
-    payments/     — PaymentProvider interface + Xente impl (Flutterwave/legacy quarantined)
+    payments/     — PaymentProvider interface + Xente impl
     utils/
   backend/db/migrations/  backend/tests/
   web/              — React dashboard (next phase)
