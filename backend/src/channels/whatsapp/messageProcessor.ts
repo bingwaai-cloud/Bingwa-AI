@@ -1,6 +1,7 @@
 import { handleIncomingMessage } from './echoBot.js'
-import { markMessageRead, sendTextMessage } from './whatsappClient.js'
+import { markMessageRead, sendTextMessage, sendWhatsAppDocument } from './whatsappClient.js'
 import { logger } from '../../utils/logger.js'
+import { getCachedDocumentPayload, consumeDocumentPayload } from '../../services/documentCache.js'
 import { normalizePhone, maskPhone, detectIdentityFormat, maskBsuid } from '../../utils/phone.js'
 import {
   resolveTenantByIdentity,
@@ -196,6 +197,16 @@ export async function processWebhookPayload(body: MetaWebhookBody): Promise<void
             setImmediate(() => {
               void handleStartRequest(identity).catch((err) => {
                 logger.error({ event: 'start_handling_error', messageId: message.id, err })
+              })
+            })
+            continue
+          }
+
+          // Handle RETRY keyword: re-send last cached document (WP-33)
+          if (trimmedUpper === 'RETRY') {
+            setImmediate(() => {
+              void handleRetryRequest(identity).catch((err) => {
+                logger.error({ event: 'retry_handling_error', messageId: message.id, err })
               })
             })
             continue
@@ -437,4 +448,34 @@ async function handleStartRequest(identity: ChannelIdentity): Promise<void> {
     identity.replyTarget,
     'You are now subscribed to offers and updates. Reply STOP anytime to unsubscribe.'
   )
+}
+
+/**
+ * Handle a RETRY message: re-send the last cached document (WP-33).
+ * Single-shot: cache entry is consumed on successful re-send.
+ * Only works for phone-based senders — document cache is phone-keyed.
+ */
+export async function handleRetryRequest(identity: ChannelIdentity): Promise<void> {
+  if (!identity.phone) {
+    await sendTextMessage(identity.replyTarget, 'No recent document to retry.')
+    return
+  }
+
+  const cached = getCachedDocumentPayload(identity.phone)
+  if (!cached) {
+    await sendTextMessage(identity.replyTarget, 'No recent document to retry.')
+    return
+  }
+
+  // Re-send the cached document payload
+  await sendWhatsAppDocument(
+    identity.replyTarget,
+    cached.buffer,
+    cached.filename,
+    cached.caption
+  )
+
+  // Single-shot: consume after successful send (even if sendWhatsAppDocument
+  // logged an error internally — the attempt was made; don't spam on repeat RETRY)
+  consumeDocumentPayload(identity.phone)
 }
