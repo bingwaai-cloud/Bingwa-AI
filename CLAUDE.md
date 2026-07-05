@@ -21,17 +21,23 @@ the web dashboard follows fast as the full ERP surface.
 - Natural language interface — users type/speak as they talk (EN + Luganda + Swahili mixed)
 - Modules: Sales, Inventory, Purchases, Receipts, Suppliers, Customers, Reports, Subscriptions
 - Later: supplier network, WhatsApp-native marketing, URA EFRIS fiscal invoicing
-- Payments: MTN MoMo + Airtel Money **via Flutterwave aggregator** (DECIDED)
+- Payments: MTN MoMo + Airtel Money **via Xente aggregator** (DECIDED, WP-25 — replaced Flutterwave)
 - WhatsApp delivery: **360dialog Premium BSP, single shared number** (DECIDED)
 
 ## Fixed vendor decisions (do not re-litigate)
 - 360dialog Premium — shared bot number, tenant resolved by sender phone.
   Risks managed: quality-rating monitoring, broadcast gating, second-number runbook,
   one-phone→many-tenants model with "switch business" command.
-- Flutterwave — starting Individual account, migrating to Business account.
-  All payment code MUST sit behind the internal PaymentProvider interface so the
-  account migration (new keys/merchant ID/webhooks) is a config change.
-  (Current direct MTN/Airtel clients in src/payments/ are legacy → wrap/replace.)
+- Xente (WP-25, replaced Flutterwave) — MTN + Airtel collections via one API.
+  All payment code MUST sit behind the internal PaymentProvider interface so any
+  vendor/account change (new keys/webhooks) is a config change — this seam is
+  exactly what made the Flutterwave→Xente swap a registry entry + env block.
+  Xente specifics: bearer-token auth (60-min TTL, cached in-process); IPN has NO
+  signature — auth = source-IP allowlist + secret path token, and settlement
+  ALWAYS re-queries by provider_txn_id (never trusts the IPN body).
+  flutterwaveProvider and the direct MTN/Airtel clients stay in the tree
+  quarantined (selectable by env for late-callback settlement); deleting them is
+  a later cleanup.
 
 ## Tech stack
 - Backend: Node.js + Express + TypeScript (strict)
@@ -39,7 +45,7 @@ the web dashboard follows fast as the full ERP surface.
   schema-per-tenant; see .claude/rules/multi-tenant.md)
 - AI/NLP runtime: Claude API — claude-sonnet for parsing (model id in env, never hardcoded)
 - WhatsApp: 360dialog (Cloud API-compatible payloads)
-- Payments: Flutterwave (behind PaymentProvider interface)
+- Payments: Xente (behind PaymentProvider interface; Flutterwave + legacy clients quarantined)
 - Auth: JWT + refresh tokens; 2FA for web owner accounts
 - Web: React + TypeScript + Tailwind + shadcn/ui (tokenized theme), mobile-first PWA
 - ORM: Prisma | Validation: Zod | Testing: Jest + Supertest
@@ -54,7 +60,7 @@ gezi-ai/  (folder currently named bingwa-ai)
     routes/ controllers/ services/ repositories/ middleware/
     nlp/          — intent parsing engine
     channels/     — WhatsApp (and future Telegram/USSD) adapters  [rename of whatsapp/]
-    payments/     — PaymentProvider interface + Flutterwave impl
+    payments/     — PaymentProvider interface + Xente impl (Flutterwave/legacy quarantined)
     utils/
   backend/db/migrations/  backend/tests/
   web/              — React dashboard (next phase)

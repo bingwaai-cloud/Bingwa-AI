@@ -59,6 +59,7 @@ model PaymentTransaction {
   tenantId          String   @db.Uuid
   provider          String   @db.VarChar(20)
   providerReference String?  @db.VarChar(255)
+  providerTxnId     String?  @map("provider_txn_id") @db.VarChar(64)
   amountUgx         Int
   status            String   @default("pending") @db.VarChar(20)
   type              String   @db.VarChar(20)

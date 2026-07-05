@@ -6,7 +6,7 @@ import { salesRouter } from './sales.js'
 import { inventoryRouter } from './inventory.js'
 import { purchasesRouter } from './purchases.js'
 import { suppliersRouter } from './suppliers.js'
-import { paymentsRouter, paymentCallbackRouter, flutterwaveCallbackRouter } from './payments.js'
+import { paymentsRouter, paymentCallbackRouter, flutterwaveCallbackRouter, xenteCallbackRouter } from './payments.js'
 import { customersRouter } from './customers.js'
 import { marketingRouter } from './marketing.js'
 import { ordersRouter } from './orders.js'
@@ -38,8 +38,11 @@ apiRouter.use('/', webhookRouter)
 apiRouter.use('/v1/auth', authRouter)
 
 // Payment provider callbacks — public, no JWT.
-// Flutterwave (the cutover provider) is ALWAYS mounted:
+// Xente (WP-25, the cutover provider) and Flutterwave (quarantined ex-cutover;
+// late callbacks must still settle) are ALWAYS mounted:
+//   POST /api/payments/xente/callback/:token
 //   POST /api/payments/flutterwave/callback
+apiRouter.use('/payments', xenteCallbackRouter)
 apiRouter.use('/payments', flutterwaveCallbackRouter)
 
 // WP-17 C-1/H-1: the LEGACY MTN/Airtel callbacks act on a provider-posted

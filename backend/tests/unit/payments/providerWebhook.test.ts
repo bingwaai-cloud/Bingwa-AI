@@ -11,6 +11,9 @@ const createPaymentTransaction = jest.fn(async () => ({}))
 const findPaymentById          = jest.fn(async () => null)
 const findPaymentByProviderRef = jest.fn(async () => null)
 
+const findPaymentByProviderTxnId = jest.fn(async () => null)
+const setProviderTxnId         = jest.fn(async () => undefined)
+
 const insertAuditLog = jest.fn<(tx: unknown, entry: { action: string }) => Promise<void>>(async () => undefined)
 const sendTextMessage = jest.fn(async () => undefined)
 
@@ -32,7 +35,8 @@ jest.unstable_mockModule('../../../src/channels/whatsapp/whatsappClient.js', () 
 jest.unstable_mockModule('../../../src/utils/audit.js', () => ({ insertAuditLog }))
 jest.unstable_mockModule('../../../src/payments/paymentRepository.js', () => ({
   createPaymentTransaction, findPaymentByProviderRef, findPaymentByReference, findPaymentById,
-  findPendingPaymentsOlderThan, findRecentPendingPayment, updatePaymentStatus, markPaymentNeedsReview,
+  findPaymentByProviderTxnId, findPendingPaymentsOlderThan, findRecentPendingPayment,
+  updatePaymentStatus, markPaymentNeedsReview, setProviderTxnId,
 }))
 
 const { handleProviderWebhook } = await import('../../../src/payments/paymentService.js')

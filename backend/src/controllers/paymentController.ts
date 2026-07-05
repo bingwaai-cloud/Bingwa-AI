@@ -15,6 +15,12 @@ import {
   type AirtelCallbackPayload,
 } from '../payments/paymentService.js'
 import { flutterwaveProvider } from '../payments/flutterwaveProvider.js'
+import {
+  xenteProvider,
+  verifyXentePathToken,
+  XENTE_SOURCE_IP_HEADER,
+} from '../payments/xenteProvider.js'
+import { findPaymentByProviderTxnId } from '../payments/paymentRepository.js'
 import { selectedProviderName } from '../payments/providerRegistry.js'
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
@@ -58,8 +64,9 @@ export const initiatePayment = asyncHandler(async (req: Request, res: Response) 
   const { plan, phone } = parsed.data
   const tenantId = req.tenantId!
 
-  // Provider-agnostic when configured; legacy MTN path otherwise (default).
-  const result = selectedProviderName() === 'flutterwave'
+  // Provider-agnostic when configured (xente/flutterwave); legacy MTN path
+  // otherwise (default).
+  const result = selectedProviderName() !== 'legacy'
     ? await initiateProviderPayment(tenantId, plan, phone)
     : await initiateSubscriptionPayment(tenantId, plan, phone)
 
@@ -208,6 +215,70 @@ export const flutterwaveCallback = asyncHandler(async (req: Request & { rawBody?
   setImmediate(() => {
     void handleProviderWebhook(normalized, flutterwaveProvider).catch((err) => {
       logger.error({ event: 'flw_callback_processing_error', err })
+    })
+  })
+})
+
+/**
+ * POST /api/payments/xente/callback/:token
+ *
+ * Public endpoint — Xente IPN (WP-25). No JWT (the provider cannot send one)
+ * and — per Xente's design — NO signature either. Authentication (ALL checks
+ * run BEFORE any processing; any failure → 401):
+ *   1. Static secret path :token must equal XENTE_IPN_PATH_TOKEN (timing-safe).
+ *   2. Source IP (req.ip via trust proxy, injected under XENTE_SOURCE_IP_HEADER
+ *      so it can never be wire-spoofed) must be in XENTE_IPN_ALLOWED_IPS.
+ * Amount/status integrity does NOT come from these checks: the settle path
+ * re-queries Xente and trusts ONLY the re-queried amount/status (WP-17 C-1 —
+ * the IPN body is never trusted for money decisions).
+ *
+ * The IPN may arrive without our requestId; we then resolve our row by the
+ * provider_txn_id persisted at initiation. Respond 200 fast; settle async.
+ */
+export const xenteCallback = asyncHandler(async (req: Request, res: Response) => {
+  if (!verifyXentePathToken(req.params['token'])) {
+    logger.warn({ event: 'xente_callback_invalid_path_token' })
+    res.status(401).json({ received: false })
+    return
+  }
+
+  // Overwrite ANY inbound value with the proxy-derived client IP — the header
+  // key is an internal channel from this controller to verifyWebhook only.
+  const headers = { ...req.headers, [XENTE_SOURCE_IP_HEADER]: req.ip ?? '' }
+  const rawBody = (req as Request & { rawBody?: Buffer }).rawBody ?? Buffer.from(JSON.stringify(req.body ?? {}))
+  if (!xenteProvider.verifyWebhook(headers, rawBody)) {
+    logger.warn({ event: 'xente_callback_ip_rejected' })
+    res.status(401).json({ received: false })
+    return
+  }
+
+  const normalized = xenteProvider.parseWebhook(req.body)
+  if (!normalized) {
+    logger.info({ event: 'xente_callback_ignored_event' })
+    res.status(200).json({ received: true })
+    return
+  }
+
+  // Acknowledge immediately — Xente expects a fast 200.
+  res.status(200).json({ received: true })
+
+  setImmediate(() => {
+    void (async () => {
+      let resolved = normalized
+      // IPN without our requestId: resolve the reference via the provider's
+      // transaction id we persisted at initiation. Unresolvable → log + drop
+      // (same posture as an unknown reference).
+      if (!resolved.reference && resolved.providerRef) {
+        const row = await findPaymentByProviderTxnId(resolved.providerRef)
+        if (!row?.providerReference) {
+          logger.warn({ event: 'xente_callback_unresolvable_txn', providerRef: resolved.providerRef })
+          return
+        }
+        resolved = { ...resolved, reference: row.providerReference }
+      }
+      await handleProviderWebhook(resolved, xenteProvider)
+    })().catch((err) => {
+      logger.error({ event: 'xente_callback_processing_error', err })
     })
   })
 })

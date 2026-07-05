@@ -50,4 +50,31 @@ describe('validateEnv WhatsApp provider selection', () => {
     expect(() => validateEnv()).toThrow('process.exit 1')
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('WA_PROVIDER=360dialog but missing'))
   })
+
+  // WP-25: Xente is the cutover provider — its IPN has NO signature, so a
+  // missing allowlist/path-token would mean an unauthenticated money webhook.
+  it('fails fast when PAYMENT_PROVIDER=xente is missing required vars', () => {
+    process.env['PAYMENT_PROVIDER'] = 'xente'
+    delete process.env['XENTE_APP_KEY']
+    delete process.env['XENTE_APP_PASSWORD']
+    delete process.env['XENTE_USER_ID']
+    delete process.env['XENTE_IPN_ALLOWED_IPS']
+    delete process.env['XENTE_IPN_PATH_TOKEN']
+
+    expect(() => validateEnv()).toThrow('process.exit 1')
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('PAYMENT_PROVIDER=xente but missing'))
+  })
+
+  it('boots with PAYMENT_PROVIDER=xente when all Xente vars are present (base URL optional — has default)', () => {
+    process.env['PAYMENT_PROVIDER'] = 'xente'
+    delete process.env['XENTE_BASE_URL']
+    process.env['XENTE_APP_KEY'] = 'k'
+    process.env['XENTE_APP_PASSWORD'] = 'p'
+    process.env['XENTE_USER_ID'] = 'u'
+    process.env['XENTE_IPN_ALLOWED_IPS'] = '52.48.24.237,34.252.29.119'
+    process.env['XENTE_IPN_PATH_TOKEN'] = 'tok'
+
+    expect(() => validateEnv()).not.toThrow()
+    expect(exitSpy).not.toHaveBeenCalled()
+  })
 })

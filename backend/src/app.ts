@@ -4,12 +4,18 @@ import cors from 'cors'
 import rateLimit from 'express-rate-limit'
 import { apiRouter } from './routes/index.js'
 import { errorHandler } from './middleware/errorHandler.js'
-import { logger } from './utils/logger.js'
+import { logger, maskSecretUrl } from './utils/logger.js'
 import { getWhatsAppProvider } from './channels/whatsapp/whatsappClient.js'
 import { verifyD360BasicAuth } from './channels/whatsapp/verifySignature.js'
 
 export function createApp(): express.Express {
   const app = express()
+
+  // ─── Proxy trust (WP-25) ───────────────────────────────────────────────────
+  // Railway terminates TLS at one proxy hop; trust exactly that hop so req.ip
+  // is the real client IP from X-Forwarded-For. The Xente IPN allowlist check
+  // depends on this (Xente signs nothing — source IP is its authentication).
+  app.set('trust proxy', 1)
 
   // ─── Security headers ──────────────────────────────────────────────────────
   app.use(helmet())
@@ -88,6 +94,8 @@ export function createApp(): express.Express {
   app.use(express.urlencoded({ extended: true, limit: '1mb' }))
 
   // ─── Request timing (log slow requests) ──────────────────────────────────
+  // WP-25: the Xente IPN URL carries a static secret path token — mask it
+  // before the URL can reach any log line (security.md: never log tokens).
   app.use((req, res, next) => {
     const start = Date.now()
     res.on('finish', () => {
@@ -96,7 +104,7 @@ export function createApp(): express.Express {
         logger.warn({
           event: 'slow_request',
           method: req.method,
-          url: req.url,
+          url: maskSecretUrl(req.url),
           status: res.statusCode,
           duration,
         })

@@ -65,3 +65,12 @@ export const logger = winston.createLogger({
   format: isContainer ? productionFormat : developmentFormat,
   transports,
 })
+
+/**
+ * Mask secret-bearing path segments before a URL reaches any log line
+ * (security.md: never log tokens). Currently: the Xente IPN static path token
+ * (WP-25) — POST /api/payments/xente/callback/<token>.
+ */
+export function maskSecretUrl(url: string): string {
+  return url.replace(/(\/payments\/xente\/callback\/)[^/?#]+/, '$1:token')
+}
