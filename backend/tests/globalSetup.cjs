@@ -92,6 +92,7 @@ module.exports = async function globalSetup() {
     '018_branch_id.sql',
     '019_audit_log_immutable.sql',       // WP-17 M-3: REVOKE UPDATE/DELETE on audit_log from gezi_app
     '020_user_2fa.sql',
+    '021_provider_txn_id.sql',           // WP-25: Xente re-query key on payment_transactions (NO RLS table)
     '022_channel_identities.sql',        // WP-26: BSUID + channel-identity abstraction (NO RLS)
   ]
 

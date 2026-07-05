@@ -27,6 +27,8 @@ export function validateEnv(): void {
     'API_URL', 'WEB_ORIGINS', 'REPO_URL',
     'MTN_MOMO_SUBSCRIPTION_KEY',
     'PAYMENT_PROVIDER',
+    'XENTE_BASE_URL', 'XENTE_APP_KEY', 'XENTE_APP_PASSWORD', 'XENTE_USER_ID',
+    'XENTE_IPN_ALLOWED_IPS', 'XENTE_IPN_PATH_TOKEN',
     'RAILWAY_PROJECT_ID', 'RAILWAY_ENVIRONMENT_ID',
   ]
 
@@ -101,6 +103,25 @@ export function validateEnv(): void {
     const missingFlw = flwRequired.filter((k) => !process.env[k])
     if (missingFlw.length > 0) {
       console.error(`[startup] FATAL - PAYMENT_PROVIDER=flutterwave but missing: ${missingFlw.join(', ')}`)
+      process.exit(1)
+    }
+  }
+
+  // WP-25: Xente cutover. XENTE_BASE_URL has a default (https://api.xente.co);
+  // everything else is fail-fast required — especially the IPN auth pair
+  // (allowlist + path token): Xente sends no signature, so a missing value
+  // here would mean an unauthenticated money webhook. Never boot like that.
+  if ((process.env['PAYMENT_PROVIDER'] ?? 'legacy') === 'xente') {
+    const xenteRequired = [
+      'XENTE_APP_KEY',
+      'XENTE_APP_PASSWORD',
+      'XENTE_USER_ID',
+      'XENTE_IPN_ALLOWED_IPS',
+      'XENTE_IPN_PATH_TOKEN',
+    ]
+    const missingXente = xenteRequired.filter((k) => !process.env[k])
+    if (missingXente.length > 0) {
+      console.error(`[startup] FATAL - PAYMENT_PROVIDER=xente but missing: ${missingXente.join(', ')}`)
       process.exit(1)
     }
   }

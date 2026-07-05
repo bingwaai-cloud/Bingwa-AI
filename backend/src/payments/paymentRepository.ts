@@ -89,6 +89,35 @@ export async function findPaymentByProviderRef(
  */
 export const findPaymentByReference = findPaymentByProviderRef
 
+/**
+ * Look up a transaction by the PROVIDER'S OWN transaction id (WP-25: Xente
+ * re-queries by their id, and their IPN may arrive without our requestId).
+ */
+export async function findPaymentByProviderTxnId(
+  providerTxnId: string
+): Promise<PaymentTransaction | null> {
+  return db.paymentTransaction.findFirst({
+    where: { providerTxnId },
+  })
+}
+
+/**
+ * Persist the provider's own transaction id (WP-25, migration 021) from the
+ * initiation response or the IPN body. Write-once: only fills a NULL column so
+ * a later (possibly forged) webhook can never overwrite the recorded id.
+ */
+export async function setProviderTxnId(
+  id: string,
+  providerTxnId: string,
+  tx?: Prisma.TransactionClient
+): Promise<void> {
+  const client = tx ?? db
+  await client.paymentTransaction.updateMany({
+    where: { id, providerTxnId: null },
+    data:  { providerTxnId },
+  })
+}
+
 export async function updatePaymentStatus(
   id: string,
   status: PaymentStatus,

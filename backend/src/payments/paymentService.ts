@@ -32,14 +32,16 @@ import {
   findRecentPendingPayment,
   updatePaymentStatus,
   markPaymentNeedsReview,
+  setProviderTxnId,
   type PaymentType,
   type PaymentChannel,
 } from './paymentRepository.js'
 import { getActivePaymentProvider } from './providerRegistry.js'
-import type {
-  PaymentProvider,
-  NormalizedWebhookResult,
-  ProviderTransaction,
+import {
+  MissingProviderTxnIdError,
+  type PaymentProvider,
+  type NormalizedWebhookResult,
+  type ProviderTransaction,
 } from './PaymentProvider.js'
 import type { Prisma, PaymentTransaction } from '@prisma/client'
 
@@ -827,6 +829,30 @@ async function applySettledPayment(
 }
 
 /**
+ * Park a row as needs_review with its audit entry in the SAME transaction.
+ * Used for amount mismatches AND for rows we cannot verify at all (WP-25:
+ * provider_txn_id missing → re-query impossible → a human must reconcile).
+ */
+async function parkNeedsReview(
+  transaction: PaymentTransaction,
+  detail: Record<string, unknown>,
+  source: string
+): Promise<void> {
+  await withTenant(transaction.tenantId, async (tx) => {
+    await markPaymentNeedsReview(transaction.id, tx)
+    await insertAuditLog(tx, {
+      tenantId:   transaction.tenantId,
+      action:     'payment.needs_review',
+      entityType: 'payment',
+      entityId:   transaction.id,
+      oldValue:   { expected: transaction.amountUgx },
+      newValue:   detail,
+      source,
+    })
+  })
+}
+
+/**
  * Apply an AUTHORITATIVE (re-queried) provider snapshot to our row. Handles
  * success (with amount check) and failure. Pending is left to the caller, since
  * "pending" means different things on a fresh webhook vs a 10-minute-stale sweep.
@@ -852,18 +878,11 @@ async function settleFromAuthoritative(
         expected: transaction.amountUgx,
         received: authoritative.amountUGX,
       })
-      await withTenant(transaction.tenantId, async (tx) => {
-        await markPaymentNeedsReview(transaction.id, tx)
-        await insertAuditLog(tx, {
-          tenantId:   transaction.tenantId,
-          action:     'payment.needs_review',
-          entityType: 'payment',
-          entityId:   transaction.id,
-          oldValue:   { expected: transaction.amountUgx },
-          newValue:   { received: authoritative.amountUGX, providerRef: authoritative.providerRef },
-          source,
-        })
-      })
+      await parkNeedsReview(
+        transaction,
+        { received: authoritative.amountUGX, providerRef: authoritative.providerRef },
+        source
+      )
       await sendTextMessage(
         ownerPhone,
         'Payment received but the amount needs checking. Our team will confirm shortly — no action needed.'
@@ -941,10 +960,25 @@ export async function handleProviderWebhook(
     return
   }
 
+  // WP-25: providers that re-query by their own transaction id (Xente) need it
+  // persisted. Fill it from the webhook body when the initiation response did
+  // not carry it — write-once (setProviderTxnId only fills a NULL column), and
+  // safe because the id is only ever USED to re-query, never to settle.
+  if (!transaction.providerTxnId && normalized.providerRef) {
+    await setProviderTxnId(transaction.id, normalized.providerRef)
+  }
+
   let authoritative: ProviderTransaction
   try {
     authoritative = await provider.getTransaction(normalized.reference)
   } catch (err) {
+    if (err instanceof MissingProviderTxnIdError) {
+      // We have no id to re-query by and never will from this webhook — the
+      // row is unverifiable. Park for human reconciliation; NEVER activate.
+      logger.error({ event: 'provider_webhook_missing_txn_id', reference: normalized.reference })
+      await parkNeedsReview(transaction, { reason: 'missing_provider_txn_id' }, 'webhook')
+      return
+    }
     // Re-query failed — DO NOT trust the webhook body. Leave pending; the
     // timeout sweep will retry. (security.md §8: never settle on unverified data.)
     logger.error({ event: 'provider_webhook_requery_failed', reference: normalized.reference, err })
@@ -1007,6 +1041,19 @@ export async function checkPendingPaymentTimeoutVia(
       }
       await settleFromAuthoritative(row, tenant.ownerPhone, authoritative, 'scheduler')
     } catch (err) {
+      if (err instanceof MissingProviderTxnIdError) {
+        // WP-25: no provider transaction id was ever recorded (initiation
+        // response lost AND no IPN arrived) — the row can never be re-queried.
+        // Park as needs_review so a human reconciles; never guess, never retry
+        // forever. (The typed error is thrown by the provider, logged here.)
+        logger.error({ event: 'provider_timeout_missing_txn_id', txId: row.id, tenantId: row.tenantId })
+        try {
+          await parkNeedsReview(row, { reason: 'missing_provider_txn_id' }, 'scheduler')
+        } catch (parkErr) {
+          logger.error({ event: 'provider_timeout_park_failed', txId: row.id, err: parkErr })
+        }
+        continue
+      }
       logger.error({ event: 'provider_timeout_check_error', txId: row.id, tenantId: row.tenantId, err })
     }
   }
@@ -1056,12 +1103,17 @@ export async function initiateProviderPayment(
   })
 
   try {
-    await provider.initiateCollection(
+    const initiated = await provider.initiateCollection(
       normalizedPhone,
       planConfig.amountUgx,
       transactionId,
       `Gezi AI ${planConfig.name} plan`
     )
+    // WP-25: persist the provider's own transaction id when returned
+    // synchronously — Xente can only be re-queried by it (migration 021).
+    if (initiated.providerRef) {
+      await setProviderTxnId(transactionId, initiated.providerRef)
+    }
   } catch (err) {
     await updatePaymentStatus(transactionId, 'failed')
     throw err

@@ -53,6 +53,20 @@ export interface NormalizedWebhookResult {
 /** Header bag as Express delivers it. */
 export type WebhookHeaders = Record<string, string | string[] | undefined>
 
+/**
+ * Thrown by getTransaction() when a provider can only re-query by ITS OWN
+ * transaction id (persisted in payment_transactions.provider_txn_id) and our
+ * row has none recorded (WP-25 / Xente). The settle + reconciliation flows
+ * catch this SPECIFIC error and park the row as needs_review — we never guess
+ * a transaction id and never settle unverified (security.md §8).
+ */
+export class MissingProviderTxnIdError extends Error {
+  constructor(public readonly reference: string) {
+    super(`No provider transaction id recorded for reference ${reference} — cannot re-query`)
+    this.name = 'MissingProviderTxnIdError'
+  }
+}
+
 export interface PaymentProvider {
   /** Stable identifier, e.g. 'flutterwave' | 'legacy'. Used in logs/audit. */
   readonly name: string

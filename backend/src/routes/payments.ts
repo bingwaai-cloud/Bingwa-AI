@@ -8,6 +8,7 @@ import {
   initiateAirtelPayment,
   airtelCallback,
   flutterwaveCallback,
+  xenteCallback,
 } from '../controllers/paymentController.js'
 import { logger } from '../utils/logger.js'
 
@@ -75,8 +76,17 @@ function verifyAirtelSignature(req: Request, res: Response, next: NextFunction):
 
 paymentCallbackRouter.post('/airtel/callback', verifyAirtelSignature, airtelCallback)
 
-// ── Flutterwave callback router — ALWAYS mounted (the cutover provider).
+// ── Flutterwave callback router — ALWAYS mounted (quarantined ex-cutover
+// provider; late callbacks for pre-cutover charges must still settle).
 // Hash verification happens INSIDE the handler against the raw body, and the
 // settle path re-queries Flutterwave (handleProviderWebhook → settleFromAuthoritative).
 export const flutterwaveCallbackRouter = Router()
 flutterwaveCallbackRouter.post('/flutterwave/callback', flutterwaveCallback)
+
+// ── Xente callback router — ALWAYS mounted (WP-25: the cutover provider).
+// The :token path segment is a static secret (XENTE_IPN_PATH_TOKEN, timing-safe
+// compare) — Xente signs nothing, so authentication is path token + source-IP
+// allowlist, both enforced INSIDE the handler before any processing. The settle
+// path re-queries Xente by provider_txn_id and trusts only that answer.
+export const xenteCallbackRouter = Router()
+xenteCallbackRouter.post('/xente/callback/:token', xenteCallback)

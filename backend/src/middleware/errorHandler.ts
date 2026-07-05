@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from '../utils/AppError.js'
-import { logger } from '../utils/logger.js'
+import { logger, maskSecretUrl } from '../utils/logger.js'
 
 /**
  * Global Express error handler. Must be the LAST middleware registered.
@@ -19,7 +19,7 @@ export function errorHandler(
     event: 'request_error',
     message: err.message,
     stack: err.stack,
-    url: req.url,
+    url: maskSecretUrl(req.url),
     method: req.method,
     tenantId: (req as Request & { tenantId?: string }).tenantId,
   })

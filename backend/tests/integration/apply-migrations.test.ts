@@ -41,6 +41,7 @@ const EXPECTED_FILES = [
   '018_branch_id.sql',
   '019_audit_log_immutable.sql',
   '020_user_2fa.sql',
+  '021_provider_txn_id.sql',
   '022_channel_identities.sql',
 ]
 
