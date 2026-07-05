@@ -19,7 +19,7 @@ const CreateCustomerSchema = z.object({
   phone:  z.string().max(20).optional(),
   name:   z.string().min(1).max(255).optional(),
   notes:  z.string().max(1000).optional(),
-  source: z.enum(['whatsapp', 'web', 'mobile', 'api']).default('api'),
+  source: z.enum(['whatsapp', 'web', 'mobile', 'api', 'pos']).default('api'),
 })
 
 const UpdateCustomerSchema = z.object({

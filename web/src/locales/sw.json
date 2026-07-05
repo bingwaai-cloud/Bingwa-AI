@@ -225,6 +225,33 @@
       "copied": "Zimenakiliwa",
       "download": "Pakua",
       "saved": "Nimezihifadhi"
+    },
+    "pos": {
+      "title": "POS",
+      "emptyInventory": "Hakuna bidhaa",
+      "emptyInventoryBody": "Ongeza bidhaa kwenye Bidhaa kabla ya kutumia POS.",
+      "search": "Tafuta bidhaa",
+      "qty": "Kiasi",
+      "price": "Bei",
+      "editPrice": "Badilisha bei",
+      "keypadTitle": "Weka bei",
+      "clear": "Futa",
+      "backspace": "Nyuma",
+      "done": "Sawa",
+      "cartTitle": "Mkokoteni",
+      "total": "Jumla",
+      "charge": "Toza",
+      "noItems": "Bonyeza bidhaa kuiongeza kwenye mkokoteni.",
+      "syncSynced": "Imesawazishwa",
+      "syncQueued_one": "{{count}} inasubiri",
+      "syncQueued_other": "{{count}} zinasubiri",
+      "syncNeedsAttention": "Inahitaji uangalizi",
+      "queueErrorTitle": "{{name}} haikuweza kuhifadhiwa",
+      "queueErrorRetry": "Jaribu tena",
+      "queueErrorEdit": "Badilisha",
+      "queueErrorDiscard": "Tupa",
+      "queueErrorBody422": "Hakuna bidhaa za kutosha. Kagua bidhaa.",
+      "queueErrorBody400": "Data si sahihi. Badilisha ujaribu tena."
     }
   }
 }

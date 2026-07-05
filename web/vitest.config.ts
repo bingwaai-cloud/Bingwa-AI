@@ -9,6 +9,6 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    setupFiles: ["./src/test/setup.ts"]
+    setupFiles: ["fake-indexeddb/auto", "./src/test/setup.ts"]
   }
 });

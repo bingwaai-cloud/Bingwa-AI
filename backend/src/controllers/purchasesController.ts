@@ -21,7 +21,7 @@ const CreatePurchaseSchema = z.object({
   supplierId: z.string().uuid().optional(),
   supplierName: z.string().max(255).optional(),
   notes: z.string().max(1000).optional(),
-  source: z.enum(['whatsapp', 'web', 'mobile', 'api']).default('api'),
+  source: z.enum(['whatsapp', 'web', 'mobile', 'api', 'pos']).default('api'),
 })
 
 const ListPurchasesSchema = z.object({

@@ -6,6 +6,7 @@ import { AuthProvider } from "@/features/auth/AuthContext";
 import { LoginPage } from "@/features/auth/LoginPage";
 import { RequireAuth } from "@/features/auth/RequireAuth";
 import { TwoFactorChallengePage } from "@/features/auth/TwoFactorChallengePage";
+import { RequirePos } from "@/features/pos/RequirePos";
 import { TodayPage } from "@/features/today/TodayPage";
 import { AppShell } from "@/shell/AppShell";
 
@@ -15,6 +16,7 @@ const CustomersPage = lazy(() => import("@/features/modules/CustomersPage").then
 const ReportsPage = lazy(() => import("@/features/modules/ReportsPage").then((module) => ({ default: module.ReportsPage })));
 const SettingsPage = lazy(() => import("@/features/settings/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 const TwoFactorSetupPage = lazy(() => import("@/features/auth/TwoFactorSetupPage").then((module) => ({ default: module.TwoFactorSetupPage })));
+const PosPage = lazy(() => import("@/features/pos/PosPage").then((module) => ({ default: module.PosPage })));
 
 function RouteFallback(): React.ReactElement {
   return <div className="h-40 animate-pulse rounded-lg bg-line" />;
@@ -45,6 +47,13 @@ export const router = createBrowserRouter([
               { path: "reports", element: lazyRoute(<ReportsPage />) },
               { path: "settings", element: lazyRoute(<SettingsPage />) },
               { path: "settings/2fa", element: lazyRoute(<TwoFactorSetupPage />) }
+            ]
+          },
+          {
+            path: "pos",
+            element: <RequirePos />,
+            children: [
+              { index: true, element: lazyRoute(<PosPage />) }
             ]
           }
         ]

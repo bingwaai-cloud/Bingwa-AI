@@ -225,6 +225,33 @@
       "copied": "Copied",
       "download": "Download",
       "saved": "I've saved these"
+    },
+    "pos": {
+      "title": "POS",
+      "emptyInventory": "No inventory items",
+      "emptyInventoryBody": "Add items in Inventory before using the POS.",
+      "search": "Search items",
+      "qty": "Qty",
+      "price": "Price",
+      "editPrice": "Edit price",
+      "keypadTitle": "Enter price",
+      "clear": "Clear",
+      "backspace": "Back",
+      "done": "Done",
+      "cartTitle": "Cart",
+      "total": "Total",
+      "charge": "Charge",
+      "noItems": "Tap items to add them to the cart.",
+      "syncSynced": "Synced",
+      "syncQueued_one": "{{count}} queued",
+      "syncQueued_other": "{{count}} queued",
+      "syncNeedsAttention": "Needs attention",
+      "queueErrorTitle": "{{name}} could not be saved",
+      "queueErrorRetry": "Retry",
+      "queueErrorEdit": "Edit",
+      "queueErrorDiscard": "Discard",
+      "queueErrorBody422": "Not enough stock. Check inventory.",
+      "queueErrorBody400": "Invalid data. Edit and try again."
     }
   }
 }

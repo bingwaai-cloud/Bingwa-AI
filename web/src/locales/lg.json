@@ -225,6 +225,33 @@
       "copied": "Zikoppeddwa",
       "download": "Wanula",
       "saved": "Nziterese"
+    },
+    "pos": {
+      "title": "POS",
+      "emptyInventory": "Tewali bintu mu sitooki",
+      "emptyInventoryBody": "Tekaamu ebintu mu Sitooki nga tonnaba kukozesa POS.",
+      "search": "Noonya ebintu",
+      "qty": "Obungi",
+      "price": "Bbeeyi",
+      "editPrice": "Kyusa bbeeyi",
+      "keypadTitle": "Teekamu bbeeyi",
+      "clear": "Sangula",
+      "backspace": "Ddayo",
+      "done": "Kakasa",
+      "cartTitle": "Ebiguliddwa",
+      "total": "Omugatte",
+      "charge": "Sasula",
+      "noItems": "Koona ku kintu okukiteeka mu biguliddwa.",
+      "syncSynced": "Bikwataganyiziddwa",
+      "syncQueued_one": "{{count}} elindirira",
+      "syncQueued_other": "{{count}} zilindirira",
+      "syncNeedsAttention": "Yeetaaga okukebelebwa",
+      "queueErrorTitle": "{{name}} tesobole kuterereka",
+      "queueErrorRetry": "Gezaako nate",
+      "queueErrorEdit": "Kyusa",
+      "queueErrorDiscard": "Suula",
+      "queueErrorBody422": "Sitooki temala. Kebera sitooki.",
+      "queueErrorBody400": "Data temala. Kyusa ogezeeko nate."
     }
   }
 }
