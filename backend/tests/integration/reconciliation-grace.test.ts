@@ -37,6 +37,7 @@ import type { ProviderTransaction } from '../../src/payments/PaymentProvider.js'
 // Mock WhatsApp client
 jest.unstable_mockModule('../../src/channels/whatsapp/whatsappClient.js', () => ({
   sendTextMessage: jest.fn().mockImplementation(() => Promise.resolve()),
+  sendWhatsAppDocument: jest.fn().mockImplementation(() => Promise.resolve()),
   markMessageRead: jest.fn().mockImplementation(() => Promise.resolve()),
   getWhatsAppProvider: jest.fn(() => 'meta'),
 }))
@@ -108,9 +109,12 @@ beforeEach(async () => {
   await truncateAuditLog()
   // Clear any leftover subscriptions
   await db.subscription.deleteMany({ where: { tenantId: { in: [TENANT_A_ID, TENANT_B_ID] } } })
-  // Sanitize ALL payment_transactions via adminDb — guards against cross-suite
-  // pollution from cumulative $disconnect cycles (WP-14 regression fix).
-  await getAdminDb().paymentTransaction.deleteMany({})
+  // WP-30: scope payment cleanup to THIS suite's own tenants. The old global
+  // deleteMany({}) band-aid is gone — cross-suite leftover rows no longer skew
+  // counts because runReconciliation is scoped via RECON_OPTS.tenantIds.
+  await getAdminDb().paymentTransaction.deleteMany({
+    where: { tenantId: { in: [TENANT_A_ID, TENANT_B_ID] } },
+  })
 })
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -165,6 +169,9 @@ async function seedSubscription(overrides: {
   })
 }
 
+/** Tenant scope for reconciliation — keeps tests deterministic across suites. */
+const RECON_OPTS = { tenantIds: [TENANT_A_ID, TENANT_B_ID] }
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // 1. Reconciliation — mismatch detection (status AND amount)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -186,7 +193,7 @@ describe('Reconciliation — mismatch detection', () => {
       phone: null,
     })
 
-    const result = await reconciler.runReconciliation()
+    const result = await reconciler.runReconciliation(RECON_OPTS)
 
     expect(result.checked).toBe(1)
     expect(result.mismatched).toBe(1)
@@ -224,7 +231,7 @@ describe('Reconciliation — mismatch detection', () => {
       phone: null,
     })
 
-    const result = await reconciler.runReconciliation()
+    const result = await reconciler.runReconciliation(RECON_OPTS)
 
     expect(result.mismatched).toBe(1)
 
@@ -251,7 +258,7 @@ describe('Reconciliation — mismatch detection', () => {
       phone: null,
     })
 
-    const result = await reconciler.runReconciliation()
+    const result = await reconciler.runReconciliation(RECON_OPTS)
 
     // Already needs_review — skipped, not re-processed
     expect(result.checked).toBe(0)
@@ -276,13 +283,13 @@ describe('Reconciliation — mismatch detection', () => {
     })
 
     // First run
-    await reconciler.runReconciliation()
+    await reconciler.runReconciliation(RECON_OPTS)
 
     // Clear mocks to verify no calls on second run (row is now needs_review)
     mockGetTransaction.mockClear()
 
     // Second run
-    const result2 = await reconciler.runReconciliation()
+    const result2 = await reconciler.runReconciliation(RECON_OPTS)
 
     // No rows processed (they were parked on first run)
     expect(result2.checked).toBe(0)
@@ -327,7 +334,7 @@ describe('Reconciliation — cross-tenant isolation', () => {
       phone: null,
     })
 
-    await reconciler.runReconciliation()
+    await reconciler.runReconciliation(RECON_OPTS)
 
     // Both should be parked under their own tenant
     const updatedA = await db.paymentTransaction.findUnique({ where: { id: txA.id } })

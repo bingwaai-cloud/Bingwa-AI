@@ -238,4 +238,34 @@ describe('Auth hardening: TOTP, refresh rotation, RBAC', () => {
     expect(Array.isArray(row.recoveryCodes)).toBe(true)
     expect('totpLastStep' in row).toBe(true)
   })
+
+  // WP-30: prove per-limiter MemoryStore instances are independent — the login
+  // limiter (5/15min) must NOT share a counter with the global limiter (200/60s).
+  it('login limiter counts independently of the global rate limiter', async () => {
+    const BAD_PW = 'wrong_password_123'
+
+    // Exhaust the login limiter (5 attempts with bad password).
+    for (let i = 0; i < 5; i += 1) {
+      await request(app)
+        .post('/api/v1/auth/login')
+        .send({ phone: OWNER_A_PHONE, password: BAD_PW })
+    }
+
+    // 6th attempt should be blocked by the login limiter.
+    const blocked = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ phone: OWNER_A_PHONE, password: BAD_PW })
+    expect(blocked.status).toBe(429)
+
+    // Global limiter is independent — health endpoint still works.
+    const health = await request(app).get('/api/health')
+    expect(health.status).toBe(200)
+
+    // A correct login should also still be blocked (login limiter doesn't
+    // skip on success here because the failed attempts already hit the cap).
+    const correctBlocked = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ phone: OWNER_A_PHONE, password: PASSWORD })
+    expect(correctBlocked.status).toBe(429)
+  })
 })

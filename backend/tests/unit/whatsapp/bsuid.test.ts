@@ -6,6 +6,7 @@ let testSequence = 0
 
 jest.unstable_mockModule('../../../src/channels/whatsapp/whatsappClient.js', () => ({
   sendTextMessage,
+  sendWhatsAppDocument: jest.fn(),
   markMessageRead: jest.fn(),
   getWhatsAppProvider: jest.fn(() => 'meta'),
 }))

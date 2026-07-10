@@ -36,6 +36,7 @@ jest.unstable_mockModule('axios', () => ({
 }))
 jest.unstable_mockModule('../../src/channels/whatsapp/whatsappClient.js', () => ({
   sendTextMessage: jest.fn(async () => undefined),
+  sendWhatsAppDocument: jest.fn(async () => undefined),
   markMessageRead: jest.fn(),
   getWhatsAppProvider: jest.fn(() => 'meta'),
 }))

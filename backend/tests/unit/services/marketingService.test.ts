@@ -33,6 +33,7 @@ jest.unstable_mockModule('../../../src/utils/logger.js', () => ({
 }))
 jest.unstable_mockModule('../../../src/channels/whatsapp/whatsappClient.js', () => ({
   sendTextMessage: jest.fn(),
+  sendWhatsAppDocument: jest.fn(),
 }))
 jest.unstable_mockModule('../../../src/utils/phone.js', () => ({
   normalizePhone: jest.fn((phone: string) => phone.replace(/^\+/, '')),

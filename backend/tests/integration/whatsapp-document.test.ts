@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals
 const sendTextMessage = jest.fn<() => Promise<void>>()
 const sendWhatsAppDocument = jest.fn<() => Promise<void>>()
 
-jest.mock('../../src/channels/whatsapp/whatsappClient.js', () => ({
+jest.unstable_mockModule('../../src/channels/whatsapp/whatsappClient.js', () => ({
   sendTextMessage,
   sendWhatsAppDocument,
   markMessageRead: jest.fn(),

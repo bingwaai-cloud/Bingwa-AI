@@ -39,7 +39,7 @@ jest.unstable_mockModule('axios', () => {
     response?: unknown
   }
   return {
-    default: { post: jest.fn(), get: jest.fn() },
+    default: { post: jest.fn(), get: jest.fn(), isAxiosError: jest.fn(() => false) },
     AxiosError,
   }
 })
@@ -47,6 +47,7 @@ jest.unstable_mockModule('axios', () => {
 // Mock WhatsApp client — paymentService calls sendTextMessage on success/failure
 jest.unstable_mockModule('../../src/channels/whatsapp/whatsappClient.js', () => ({
   sendTextMessage: jest.fn().mockImplementation(() => Promise.resolve()),
+  sendWhatsAppDocument: jest.fn().mockImplementation(() => Promise.resolve()),
   markMessageRead: jest.fn().mockImplementation(() => Promise.resolve()),
   getWhatsAppProvider: jest.fn(() => 'meta'),
 }))

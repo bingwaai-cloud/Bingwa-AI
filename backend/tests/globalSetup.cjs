@@ -61,13 +61,18 @@ module.exports = async function globalSetup() {
         cwd: repoRoot,
         env: { ...process.env, DATABASE_URL: ownerUrl },
         stdio: 'pipe',
+        timeout: 120_000,       // WP-30: bound the hang (WP-28 root cause — stalled migrate deploy).
+        killSignal: 'SIGTERM',  // Clean kill; on Windows SIGTERM is translated to TerminateProcess.
       }
     )
   } catch (err) {
+    const timeoutHint = (err && typeof err === 'object' && 'killed' in err && err.killed)
+      ? 'Prisma baseline migration timed out after 120s — check for a stuck advisory lock / stalled migrate deploy'
+      : null
     const output = err && typeof err === 'object' && 'stdout' in err
       ? String(err.stdout ?? '') + String(err.stderr ?? '')
       : String(err)
-    throw new Error(`Prisma baseline migration failed: ${output}`)
+    throw new Error(timeoutHint ?? `Prisma baseline migration failed: ${output}`)
   }
 
   const migDir = path.resolve(__dirname, '../db/migrations')

@@ -390,9 +390,10 @@ async function callClaudeWithTimeout(
   message: string,
   context: UserContext
 ): Promise<ParsedIntent> {
-  const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error('NLP_TIMEOUT')), NLP_TIMEOUT_MS)
-  )
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('NLP_TIMEOUT')), NLP_TIMEOUT_MS)
+  })
 
   const apiPromise = (async (): Promise<ParsedIntent> => {
     const client = getClient()
@@ -445,6 +446,8 @@ async function callClaudeWithTimeout(
       preview: message.slice(0, 60),
     })
     return deterministicIntent(message, context) ?? coerceSubscriptionIntent(message, FALLBACK_INTENT)
+  } finally {
+    if (timer) clearTimeout(timer)
   }
 }
 
