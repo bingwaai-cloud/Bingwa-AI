@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 96" role="img" aria-labelledby="title desc">
+  <title id="title">Gezi AI lockup</title>
+  <desc id="desc">Gezi mark beside the lowercase gezi wordmark.</desc>
+  <g transform="translate(4 16) scale(1)" aria-hidden="true">
+    <path fill="#0E6B4A" d="M48.3 8.2 40 16.5l-8.3-8.3-5.1 5.1L40 26.7l13.4-13.4z"/>
+    <path fill="#0E6B4A" d="M47.7 29.1v12.1c0 7.4-4.8 12.3-12.6 12.3-7.6 0-13.2-5.3-13.2-13s5.6-13.1 13.2-13.1c4.5 0 8.1 1.7 10.8 4.9l5.5-5.4c-4-4.8-9.4-7.2-16.5-7.2C22.1 19.7 14 28.1 14 40.5S22.1 61 34.9 61c13.2 0 20.8-7.9 20.8-20.4V29.1z"/>
+    <path fill="#fff" d="M35.1 36.2h20.6v6.3H35.1z"/>
+  </g>
+  <text x="82" y="66" fill="#0E6B4A" font-family="InterVariable, Inter, Arial, sans-serif" font-size="64" font-weight="700" letter-spacing="3">gezi</text>
+</svg>

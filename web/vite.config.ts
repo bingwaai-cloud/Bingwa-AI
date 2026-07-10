@@ -1,14 +1,17 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["fonts/*.woff2"],
+      includeAssets: ["fonts/*.woff2", "brand/*.svg", "icons/*.png", "favicon.ico", "apple-touch-icon.png"],
       manifest: {
         name: "Gezi AI",
         short_name: "Gezi",
@@ -20,10 +23,28 @@ export default defineConfig({
         scope: "/",
         icons: [
           {
-            src: "/gezi-mark.svg",
+            src: "/icons/icon-192.png",
             sizes: "192x192",
-            type: "image/svg+xml",
-            purpose: "any maskable"
+            type: "image/png",
+            purpose: "any"
+          },
+          {
+            src: "/icons/icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any"
+          },
+          {
+            src: "/icons/icon-192-maskable.png",
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "maskable"
+          },
+          {
+            src: "/icons/icon-512-maskable.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable"
           }
         ]
       },

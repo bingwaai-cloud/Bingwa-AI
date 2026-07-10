@@ -76,14 +76,13 @@ export function AppShell(): React.ReactElement {
 
 function NavBrand({ compact = false }: { compact?: boolean }): React.ReactElement {
   return (
-    <div className="flex items-center gap-3">
-      <div className="grid size-10 place-items-center rounded-md bg-gezi-green-700 text-base font-bold text-white" aria-hidden="true">
-        g
-      </div>
-      <div className={cn("leading-tight", compact && "md:hidden")}>
-        <div className="text-lg font-bold tracking-normal text-ink-900">gezi</div>
-        <div className="text-xs font-medium text-ink-600">The champion of your business</div>
-      </div>
+    <div className={cn("flex items-center", compact ? "gap-2" : "flex-col items-start gap-3")}>
+      <img
+        src="/brand/gezi-lockup.svg"
+        alt="Gezi AI"
+        className={cn("h-auto w-auto", compact ? "h-8 max-w-[124px]" : "h-10 max-w-[160px]")}
+      />
+      {!compact ? <span className="text-xs font-medium text-ink-600">The champion of your business</span> : null}
     </div>
   );
 }
