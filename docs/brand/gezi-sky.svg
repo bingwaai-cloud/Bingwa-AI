@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="7 61 240 120" role="img" aria-label="gezi">
+  <!-- gezi wordmark v5 · big chat-bubble g holding 3 rising SKY bars #17B6E6, uniform smaller ezi · no arrow -->
+  <g stroke="#0E6B4A" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="53" cy="112" r="33"/>
+    <path d="M80 131c5 22-7 38-30 36"/>
+    <path d="M148 123A22 22 0 1 0 141.6 138.6"/>
+    <path d="M103 123h45" stroke-linecap="butt"/>
+    <path d="M166 101h48l-48 44h48"/>
+    <path d="M232 101v44"/>
+  </g>
+  <circle cx="232" cy="83" r="7" fill="#0E6B4A"/>
+  <g fill="#17B6E6">
+    <rect x="40" y="122" width="7" height="14"/>
+    <rect x="50" y="113" width="7" height="23"/>
+    <rect x="60" y="104" width="7" height="32"/>
+  </g>
+</svg>

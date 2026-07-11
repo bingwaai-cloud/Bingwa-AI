@@ -4,6 +4,10 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "rootDir": ".",
+    "baseUrl": ".",
+    "paths": {
+      "src/*": ["src/*"]
+    },
     "noEmit": true,
     "types": ["jest", "node"]
   },

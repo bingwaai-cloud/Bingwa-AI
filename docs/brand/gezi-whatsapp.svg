@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="gezi mark">
+  <!-- gezi WhatsApp profile tile v2 · just the bubble-g with SUNRISE bars, no arrow · 512×512, white ground, centered in the circular crop safe zone -->
+  <rect width="512" height="512" fill="#FFFFFF"/>
+  <g transform="translate(76 47.5) scale(3)">
+    <g stroke="#0E6B4A" stroke-width="13" fill="none" stroke-linecap="round">
+      <circle cx="60" cy="58" r="34"/>
+      <path d="M89 75c5 24-7 42-33 40"/>
+    </g>
+    <g fill="#F97316">
+      <rect x="44" y="64" width="8" height="16"/>
+      <rect x="56" y="54" width="8" height="26"/>
+      <rect x="68" y="44" width="8" height="36"/>
+    </g>
+  </g>
+</svg>

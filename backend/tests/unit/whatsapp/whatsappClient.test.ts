@@ -1,30 +1,31 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, jest } from '@jest/globals'
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 
 const post = jest.fn<() => Promise<unknown>>()
 const isAxiosError = jest.fn<(err: unknown) => boolean>()
 const cacheDocumentPayload = jest.fn()
 
-// ── Mock axios (factory runs lazily, post/isAxiosError are available) ────────
+// ── ESM mocks: jest.mock is NOT hoisted in ESM — use unstable_mockModule ──────
+// Registered BEFORE the dynamic import of any module that depends on them.
+// Imports use the `src/...` alias (not ../../../) to avoid a jest-module-loader
+// hang on 3-level-deep relative dynamic imports in ESM mode.
 
-jest.mock('axios', () => ({
+jest.unstable_mockModule('axios', () => ({
   __esModule: true,
   default: { post, isAxiosError },
 }))
 
-jest.mock('../../../src/services/documentCache.js', () => ({
+jest.unstable_mockModule('src/services/documentCache.js', () => ({
   cacheDocumentPayload,
 }))
 
-// ── Dynamic import (after mocks) ─────────────────────────────────────────────
+// ── Dynamic import (after mock registration) ─────────────────────────────────
 
-const modPromise = import('../../../src/channels/whatsapp/whatsappClient.js')
+const modPromise = import('src/channels/whatsapp/whatsappClient.js')
 
 let sendTextMessage: Function
 let sendWhatsAppDocument: Function
 let getWhatsAppProvider: Function
 let getWhatsAppTransportConfig: Function
-
-// ── Helper to type-check mock.calls access ───────────────────────────────────
 
 type PostCall = [url: unknown, body: unknown, opts: unknown]
 function getPostCall(n: number): PostCall {
@@ -32,20 +33,10 @@ function getPostCall(n: number): PostCall {
   return (c ?? []) as unknown as PostCall
 }
 
-// ── Test data ────────────────────────────────────────────────────────────────
-
 const originalEnv = process.env
 const pdfBuffer = Buffer.from('%PDF-1.4 test pdf content here', 'utf8')
 const nonPdfBuffer = Buffer.from('Not a PDF file', 'utf8')
 const oversizeBuffer = Buffer.alloc(6 * 1024 * 1024, Buffer.from('%PDF-')) // 6 MB
-
-beforeAll(async () => {
-  const mod = await modPromise
-  sendTextMessage = mod.sendTextMessage
-  sendWhatsAppDocument = mod.sendWhatsAppDocument
-  getWhatsAppProvider = mod.getWhatsAppProvider
-  getWhatsAppTransportConfig = mod.getWhatsAppTransportConfig
-})
 
 describe('WhatsApp client provider selection', () => {
   beforeEach(() => {
@@ -102,7 +93,7 @@ describe('WhatsApp client provider selection', () => {
   })
 })
 
-// ── sendWhatsAppDocument tests ────────────────────────────────────────────────
+// ── sendWhatsAppDocument tests ─────────────────────────────────────────────────
 
 describe('sendWhatsAppDocument', () => {
   const recipient = '+256700000401'
@@ -131,8 +122,6 @@ describe('sendWhatsAppDocument', () => {
     process.env['D360_BASE_URL'] = 'https://example.360dialog.test/'
   }
 
-  // ── Meta provider: two-step upload ──────────────────────────────────────────
-
   it('uploads media and sends document via Meta Cloud API', async () => {
     setupMeta()
     const mediaId = 'media-abc-123'
@@ -159,7 +148,6 @@ describe('sendWhatsAppDocument', () => {
     expect(headers['Authorization']).toBe('Bearer meta-token')
     expect(headers['Content-Type']).toContain('multipart/form-data')
 
-    // Step 2: document message
     const [msgUrl, msgBodyRaw] = getPostCall(1)
     const msgBody = msgBodyRaw as Record<string, unknown>
     expect(msgUrl).toBe('https://graph.facebook.com/v18.0/meta-phone-id/messages')
@@ -176,8 +164,6 @@ describe('sendWhatsAppDocument', () => {
       expect.objectContaining({ filename: 'report.pdf' })
     )
   })
-
-  // ── 360dialog provider: two-step upload ─────────────────────────────────────
 
   it('uploads media and sends document via 360dialog', async () => {
     setup360dialog()
@@ -202,7 +188,6 @@ describe('sendWhatsAppDocument', () => {
     const headers = mediaOpts['headers'] as Record<string, string>
     expect(headers['D360-API-KEY']).toBe('d360-key')
 
-    // Step 2: document message (no caption)
     const [, msgBodyRaw] = getPostCall(1)
     const msgBody = msgBodyRaw as Record<string, unknown>
     expect(msgBody).toEqual({
@@ -213,8 +198,6 @@ describe('sendWhatsAppDocument', () => {
       document: { id: mediaId, filename: 'invoice.pdf' },
     })
   })
-
-  // ── Error handling: fallback text ───────────────────────────────────────────
 
   it('sends text fallback when upload fails', async () => {
     setupMeta()
@@ -254,8 +237,6 @@ describe('sendWhatsAppDocument', () => {
     expect(textBlock['body']).toContain('Reply RETRY to try again')
   })
 
-  // ── Oversize rejection ──────────────────────────────────────────────────────
-
   it('rejects documents larger than 5 MB with a clear text reply', async () => {
     setupMeta()
 
@@ -270,8 +251,6 @@ describe('sendWhatsAppDocument', () => {
 
     expect(cacheDocumentPayload).not.toHaveBeenCalled()
   })
-
-  // ── Invalid mime rejection ──────────────────────────────────────────────────
 
   it('rejects non-PDF buffers with a clear text reply', async () => {
     setupMeta()
@@ -288,8 +267,6 @@ describe('sendWhatsAppDocument', () => {
     expect(cacheDocumentPayload).not.toHaveBeenCalled()
   })
 
-  // ── Edge case: recipient with + prefix ──────────────────────────────────────
-
   it('strips + from recipient for both media upload and message', async () => {
     setupMeta()
     post.mockResolvedValueOnce({ data: { id: 'media-id' } })
@@ -304,4 +281,14 @@ describe('sendWhatsAppDocument', () => {
       }
     }
   })
+})
+
+// ── Resolve dynamic imports for the helper functions above ────────────────────
+
+beforeAll(async () => {
+  const mod = await modPromise
+  sendTextMessage = mod.sendTextMessage
+  sendWhatsAppDocument = mod.sendWhatsAppDocument
+  getWhatsAppProvider = mod.getWhatsAppProvider
+  getWhatsAppTransportConfig = mod.getWhatsAppTransportConfig
 })

@@ -1,11 +1,11 @@
 import { Router } from 'express'
-import rateLimit from 'express-rate-limit'
+import { makeRateLimiter } from '../middleware/rateLimit.js'
 import * as authController from '../controllers/authController.js'
 import { authenticate, optionalAuthenticate } from '../middleware/auth.js'
 
 export const authRouter = Router()
 
-const loginRateLimit = rateLimit({
+const loginRateLimit = makeRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 5,
   keyGenerator: (req) => {
@@ -19,7 +19,7 @@ const loginRateLimit = rateLimit({
   skipSuccessfulRequests: true,
 })
 
-const twoFactorVerifyRateLimit = rateLimit({
+const twoFactorVerifyRateLimit = makeRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 5,
   keyGenerator: (req) => {

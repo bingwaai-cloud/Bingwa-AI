@@ -15,6 +15,7 @@ jest.unstable_mockModule('../../../src/channels/whatsapp/whatsappClient.js', () 
   markMessageRead: jest.fn(),
   getWhatsAppProvider: jest.fn(() => 'meta'),
   sendTextMessage,
+  sendWhatsAppDocument: jest.fn(),
 }))
 
 jest.unstable_mockModule('../../../src/services/tenantResolutionService.js', () => ({

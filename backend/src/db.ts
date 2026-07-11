@@ -69,6 +69,11 @@ if (process.env['NODE_ENV'] !== 'production') {
   globalForPrisma.prisma = db
 }
 
+// WP-30: expose Prisma pools on globalThis so CJS globalTeardown can disconnect
+// (ts-jest compiles in-memory; raw Node.js globalTeardown can't import ESM .ts).
+;(globalThis as Record<string, unknown>).__geziPrisma = db
+;(globalThis as Record<string, unknown>).__geziAdminDb = () => _adminDb
+
 // --- Row-level tenancy context (P0-1) ---------------------------------------
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 

@@ -1,7 +1,7 @@
 import express from 'express'
 import helmet from 'helmet'
 import cors from 'cors'
-import rateLimit from 'express-rate-limit'
+import { makeRateLimiter } from './middleware/rateLimit.js'
 import { apiRouter } from './routes/index.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { logger, maskSecretUrl } from './utils/logger.js'
@@ -43,7 +43,7 @@ export function createApp(): express.Express {
 
   // ─── Global rate limit (per IP) ───────────────────────────────────────────
   app.use(
-    rateLimit({
+    makeRateLimiter({
       windowMs: 60 * 1000,
       max: 200,
       standardHeaders: true,

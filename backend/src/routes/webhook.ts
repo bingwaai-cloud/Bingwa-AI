@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
-import rateLimit from 'express-rate-limit'
+import { makeRateLimiter } from '../middleware/rateLimit.js'
 import { getWhatsAppProvider } from '../channels/whatsapp/whatsappClient.js'
 import { verifyWhatsAppWebhook } from '../channels/whatsapp/verifySignature.js'
 import { processWebhookPayload, type MetaWebhookBody } from '../channels/whatsapp/messageProcessor.js'
@@ -11,10 +11,10 @@ export const webhookRouter = Router()
 
 // Rate limit: providers send at most a few messages per second per user.
 // 300 req/min per IP is generous and protects against spoofed webhook floods.
-const webhookRateLimit = rateLimit({
+const webhookRateLimit = makeRateLimiter({
   windowMs: 60 * 1000,
   max: 300,
-  keyGenerator: (req) => req.ip ?? 'unknown',
+  keyGenerator: (req: Request) => req.ip ?? 'unknown',
   message: {
     success: false,
     error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Webhook rate limit exceeded.' },

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 5 128 128" role="img" aria-label="gezi mark">
+  <!-- gezi square submark v2 · just the chat-bubble g holding 3 rising SUNRISE bars #F97316 · no arrow · favicon / PWA tile / profile photo -->
+  <g stroke="#0E6B4A" stroke-width="13" fill="none" stroke-linecap="round">
+    <circle cx="60" cy="58" r="34"/>
+    <path d="M89 75c5 24-7 42-33 40"/>
+  </g>
+  <g fill="#F97316">
+    <rect x="44" y="64" width="8" height="16"/>
+    <rect x="56" y="54" width="8" height="26"/>
+    <rect x="68" y="44" width="8" height="36"/>
+  </g>
+</svg>

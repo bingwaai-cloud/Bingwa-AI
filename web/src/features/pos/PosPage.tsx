@@ -122,19 +122,19 @@ export function PosPage(): React.ReactElement {
               <div className="flex gap-1">
                 <button
                   onClick={() => handleRetryFailed(sale)}
-                  className="rounded bg-gezi-green-700 px-2 py-1 text-xs font-medium text-white hover:bg-gezi-green-900"
+                  className="touch-target rounded bg-gezi-green-700 px-3 text-xs font-medium text-white hover:bg-gezi-green-900"
                 >
                   {t("pos.queueErrorRetry")}
                 </button>
                 <button
                   onClick={() => handleEditFailed(sale)}
-                  className="rounded border border-line px-2 py-1 text-xs font-medium text-ink-600 hover:bg-surface-1"
+                  className="touch-target rounded border border-line px-3 text-xs font-medium text-ink-600 hover:bg-surface-1"
                 >
                   {t("pos.queueErrorEdit")}
                 </button>
                 <button
                   onClick={() => handleDiscardFailed(sale)}
-                  className="rounded border border-line px-2 py-1 text-xs font-medium text-danger-600 hover:bg-danger-600/10"
+                  className="touch-target rounded border border-line px-3 text-xs font-medium text-danger-600 hover:bg-danger-600/10"
                 >
                   {t("pos.queueErrorDiscard")}
                 </button>

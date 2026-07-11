@@ -42,7 +42,7 @@ const db = {
 jest.unstable_mockModule('axios', () => ({ default: { post: jest.fn(), get: jest.fn() }, AxiosError: class extends Error {} }))
 jest.unstable_mockModule('../../../src/db.js', () => ({ db, withTenant }))
 jest.unstable_mockModule('../../../src/utils/logger.js', () => ({ logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }))
-jest.unstable_mockModule('../../../src/channels/whatsapp/whatsappClient.js', () => ({ sendTextMessage, markMessageRead: jest.fn() }))
+jest.unstable_mockModule('../../../src/channels/whatsapp/whatsappClient.js', () => ({ sendTextMessage, sendWhatsAppDocument: jest.fn(), markMessageRead: jest.fn() }))
 jest.unstable_mockModule('../../../src/utils/audit.js', () => ({ insertAuditLog }))
 jest.unstable_mockModule('../../../src/payments/paymentRepository.js', () => ({
   createPaymentTransaction, findPaymentByProviderRef, findPaymentByReference, findPaymentById,

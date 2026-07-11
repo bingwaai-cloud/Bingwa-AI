@@ -42,12 +42,24 @@ export interface ReconciliationResult {
   errors:     number
 }
 
+export interface ReconciliationOptions {
+  /**
+   * Optional tenant filter — scopes the scan to specific tenant IDs.
+   * When unset, all tenants are scanned (default scheduler behaviour).
+   * Tests use this to keep checked/mismatched counts deterministic
+   * regardless of cross-suite pollution.
+   */
+  tenantIds?: string[]
+}
+
 /**
  * Run reconciliation for payment_transactions created in the last 48 hours.
  * Only processes rows that are NOT already parked (needs_review) to ensure
  * idempotency on re-run.
  */
-export async function runReconciliation(): Promise<ReconciliationResult> {
+export async function runReconciliation(
+  opts: ReconciliationOptions = {}
+): Promise<ReconciliationResult> {
   const adminDb = getAdminDb()
   const provider: PaymentProvider = getActivePaymentProvider()
   const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000)
@@ -55,11 +67,16 @@ export async function runReconciliation(): Promise<ReconciliationResult> {
   const result: ReconciliationResult = { checked: 0, matched: 0, mismatched: 0, errors: 0 }
 
   // ── Scan via admin connection (bypasses RLS) ──────────────────────────────
+  const where: Record<string, unknown> = {
+    createdAt: { gte: cutoff },
+    status:    { not: 'needs_review' }, // idempotency: skip already-parked
+  }
+  if (opts.tenantIds?.length) {
+    where.tenantId = { in: opts.tenantIds }
+  }
+
   const rows = await adminDb.paymentTransaction.findMany({
-    where: {
-      createdAt: { gte: cutoff },
-      status:    { not: 'needs_review' }, // idempotency: skip already-parked
-    },
+    where,
     orderBy: { createdAt: 'asc' },
   })
 
