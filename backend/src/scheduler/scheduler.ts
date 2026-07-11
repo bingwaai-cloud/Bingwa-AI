@@ -204,6 +204,38 @@ async function runScheduledBackup(): Promise<void> {
 }
 
 /**
+ * Backup dead-man's-switch (WP-31).
+ * Spawns scripts/backup-heartbeat.ts, which verifies an object landed under
+ * gezi/backups/ within 8 days and alerts (WhatsApp/email/ALERT log) if not.
+ * Env-guarded: without S3 config the check cannot verify anything, so it is
+ * skipped with a loud log (BACKUP_SKIP_S3=true is the explicit local-dev skip).
+ */
+async function runScheduledBackupHeartbeat(): Promise<void> {
+  const required = ['BACKUP_S3_ENDPOINT', 'BACKUP_S3_BUCKET',
+    'BACKUP_S3_ACCESS_KEY', 'BACKUP_S3_SECRET_KEY', 'BACKUP_S3_REGION']
+
+  const missing = required.filter((k) => !process.env[k])
+  if (missing.length > 0 && process.env['BACKUP_SKIP_S3'] !== 'true') {
+    logger.error({ event: 'backup_heartbeat_skipped_missing_env', missing })
+    return
+  }
+
+  try {
+    const { stdout, stderr } = await execAsync('npx tsx scripts/backup-heartbeat.ts', {
+      env: process.env,
+      timeout: 120_000, // 2 min — a listing, not a dump
+      windowsHide: true,
+    })
+    if (stdout) logger.info({ event: 'backup_heartbeat_stdout', output: stdout.trim() })
+    if (stderr) logger.warn({ event: 'backup_heartbeat_stderr', output: stderr.trim() })
+  } catch (err) {
+    // Non-zero exit = alert already raised by the script; surface spawn output here.
+    const msg = err instanceof Error ? err.message : String(err)
+    logger.error({ event: 'backup_heartbeat_job_failed', err: msg })
+  }
+}
+
+/**
  * Register all cron jobs and start the scheduler.
  * Call once at server startup.
  */
@@ -310,6 +342,19 @@ export function startScheduler(): void {
     { timezone: TIMEZONE }
   )
 
+  // ── Backup heartbeat (dead-man's-switch): Monday 09:00 EAT (WP-31) ─────────
+  // Verifies Sunday's backup actually landed in S3. A MISSING backup is the
+  // dangerous case — absence of backup_succeeded alone must never go unnoticed.
+  cron.schedule(
+    '0 9 * * 1',
+    () => {
+      void runScheduledBackupHeartbeat().catch((err) => {
+        logger.error({ event: 'backup_heartbeat_unhandled', err })
+      })
+    },
+    { timezone: TIMEZONE }
+  )
+
   logger.info({
     event: 'scheduler_started',
     timezone: TIMEZONE,
@@ -323,6 +368,7 @@ export function startScheduler(): void {
       'reconciliation    @ 02:00 EAT daily',
       'quality_monitor   @ :30 every hour',
       'encrypted_backup  @ 03:00 EAT Sunday',
+      'backup_heartbeat  @ 09:00 EAT Monday',
     ],
   })
 }
