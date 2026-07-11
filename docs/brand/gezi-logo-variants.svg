@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 740" role="img" aria-label="gezi">
+  <title>Gezi logo — bar colorways</title>
+  <desc>The gezi wordmark — a big chat-bubble g holding three rising bars in the accent color, followed by uniform smaller letters ezi — with the bars in orange (selected), emerald, and sky. No arrow.</desc>
+  <defs>
+    <!-- one logo, bar color via currentColor -->
+    <g id="gezi-logo">
+      <g stroke="#0E6B4A" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="53" cy="112" r="33"/>
+        <path d="M80 131c5 22-7 38-30 36"/>
+        <path d="M148 123A22 22 0 1 0 141.6 138.6"/>
+        <path d="M103 123h45" stroke-linecap="butt"/>
+        <path d="M166 101h48l-48 44h48"/>
+        <path d="M232 101v44"/>
+      </g>
+      <circle cx="232" cy="83" r="7" fill="#0E6B4A"/>
+      <g fill="currentColor">
+        <rect x="40" y="122" width="7" height="14"/>
+        <rect x="50" y="113" width="7" height="23"/>
+        <rect x="60" y="104" width="7" height="32"/>
+      </g>
+    </g>
+  </defs>
+  <rect width="760" height="740" fill="#F6F8F7"/>
+  <text x="48" y="60" fill="#101418" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="700" letter-spacing="2">GEZI · LOGO · BIG BUBBLE-G · BARS ARE THE ACCENT</text>
+  <text x="48" y="92" fill="#4A5560" font-family="Inter, Arial, sans-serif" font-size="16">The g is the hero, holding the bars; ezi are uniform and smaller. Orange bars are the selected color. No arrow.</text>
+
+  <g transform="translate(48 130)">
+    <rect width="664" height="170" rx="8" fill="#fff" stroke="#E2E8E5"/>
+    <text x="28" y="40" fill="#8A95A1" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" letter-spacing="1.2">SUNRISE · #F97316 · SELECTED</text>
+    <use href="#gezi-logo" transform="translate(230 0.8) scale(0.8)" color="#F97316"/>
+  </g>
+
+  <g transform="translate(48 330)">
+    <rect width="664" height="170" rx="8" fill="#fff" stroke="#E2E8E5"/>
+    <text x="28" y="40" fill="#8A95A1" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" letter-spacing="1.2">EMERALD · #16C784 · pure growth</text>
+    <use href="#gezi-logo" transform="translate(230 0.8) scale(0.8)" color="#16C784"/>
+  </g>
+
+  <g transform="translate(48 530)">
+    <rect width="664" height="170" rx="8" fill="#fff" stroke="#E2E8E5"/>
+    <text x="28" y="40" fill="#8A95A1" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" letter-spacing="1.2">SKY · #17B6E6 · trust + modern</text>
+    <use href="#gezi-logo" transform="translate(230 0.8) scale(0.8)" color="#17B6E6"/>
+  </g>
+</svg>

@@ -13,8 +13,11 @@ stock photos of "Africa", kitenge-pattern decoration, or playful illustration.
 
 ## Brand
 - Product: **Gezi AI** (omugezi = wise person, Luganda). Tagline: "The champion of your business."
-- Logo direction: simple wordmark "gezi" lowercase + a single geometric mark
-  (abstract g / upward chevron = growth). No mascots, no lions, no shields.
+- Logo (FINAL, WP-32 — see docs/brand/BRAND.md): lowercase wordmark "gezi",
+  outlined monoline paths (no fonts); a big chat-bubble g holds 3 rising
+  orange (#F97316) bars — the only accent; e/z/i uniform and smaller; NO
+  arrow/chevron. Small placements use the g-only submark (gezi-mark.svg).
+  No mascots, no lions, no shields.
 - Brand personality in UI copy: a sharp, respectful business partner — speaks
   plainly, celebrates wins quietly ("Best Tuesday this month"), never condescends.
 

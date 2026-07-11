@@ -9,6 +9,12 @@
       "port": 3000
     },
     {
+      "name": "brand-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["-y", "http-server", "docs/brand", "-p", "8123", "-c-1"],
+      "port": 8123
+    },
+    {
       "name": "Prisma Studio",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "studio"],
