@@ -43,6 +43,7 @@ const EXPECTED_FILES = [
   '020_user_2fa.sql',
   '021_provider_txn_id.sql',
   '022_channel_identities.sql',
+  '023_idempotency_keys.sql',
 ]
 
 function runScript(): { stdout: string; stderr: string } {

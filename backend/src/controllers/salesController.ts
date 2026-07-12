@@ -1,18 +1,25 @@
 import { type Request, type Response } from 'express'
 import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 import { asyncHandler } from '../middleware/asyncHandler.js'
 import { AppError, ErrorCodes } from '../utils/AppError.js'
 import { DateRangeQuerySchema, SummaryGroupBySchema, boundedDateRange } from '../utils/queryParams.js'
 import { formatUGX, formatUGXShort } from '../nlp/normalizers.js'
 import {
   createSaleRecord,
+  createSaleRecordWithIdempotency,
+  findStoredIdempotency,
   getSaleById,
   listSales,
   getTodaySummary,
   getSalesSummary,
   cancelSale,
+  SALES_IDEMPOTENCY_ENDPOINT,
   type SaleResult,
 } from '../services/salesService.js'
+
+// UUID-shaped Idempotency-Key only (WP-35). The POS generates client UUIDs.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const SaleLineSchema = z.object({
   itemId: z.string().uuid().optional(),
@@ -103,6 +110,68 @@ export const handleCreateSale = asyncHandler(async (req: Request, res: Response)
     )
   }
 
+  // ── WP-35: server-side sales idempotency ──────────────────────────────────
+  // If the POS (or any caller) sends Idempotency-Key, the FIRST request records
+  // the sale + its 201 response; replays return the stored response verbatim
+  // with `Idempotency-Replayed: true` and perform NO write. Requests without
+  // the header take the unchanged legacy path (WhatsApp, web, drafts).
+  const rawKey = req.headers['idempotency-key']
+  if (rawKey != null) {
+    const key = Array.isArray(rawKey) ? (rawKey[0] ?? '') : rawKey
+    if (!UUID_RE.test(key)) {
+      throw new AppError(
+        ErrorCodes.VALIDATION_ERROR,
+        'Idempotency-Key must be a UUID',
+        400
+      )
+    }
+
+    // Step a — replay if a prior request already recorded this key.
+    const stored = await findStoredIdempotency(tenantId, SALES_IDEMPOTENCY_ENDPOINT, key)
+    if (stored) {
+      res.set('Idempotency-Replayed', 'true')
+      res.status(stored.responseStatus).json(stored.responseBody)
+      return
+    }
+
+    // Step b — first time: record the sale AND the key row in one transaction.
+    try {
+      const outcome = await createSaleRecordWithIdempotency({
+        tenantId,
+        endpoint: SALES_IDEMPOTENCY_ENDPOINT,
+        idempotencyKey: key,
+        saleParams: {
+          items: parsed.data.items,
+          customerPhone: parsed.data.customerPhone,
+          customerName: parsed.data.customerName,
+          notes: parsed.data.notes,
+          source: parsed.data.source,
+          actorUserId: req.user?.userId,
+        },
+        serialize: (result) => serializeSaleResponse(req, result),
+      })
+      res.status(outcome.statusCode).json(outcome.body)
+      return
+    } catch (err) {
+      // Step c — concurrent duplicate: the key INSERT hit the unique
+      // constraint. The transaction (sale included) rolled back; re-read the
+      // winning row and replay it. Any other error is rethrown unchanged.
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        const winner = await findStoredIdempotency(tenantId, SALES_IDEMPOTENCY_ENDPOINT, key)
+        if (winner) {
+          res.set('Idempotency-Replayed', 'true')
+          res.status(winner.responseStatus).json(winner.responseBody)
+          return
+        }
+      }
+      throw err
+    }
+  }
+
+  // ── Legacy path (no Idempotency-Key header) — unchanged behaviour ──────────
   const result = await createSaleRecord(tenantId, {
     items: parsed.data.items,
     customerPhone: parsed.data.customerPhone,
@@ -112,23 +181,33 @@ export const handleCreateSale = asyncHandler(async (req: Request, res: Response)
     actorUserId: req.user?.userId,
   })
 
+  res.status(201).json(serializeSaleResponse(req, result).body)
+})
+
+/**
+ * Build the POST /sales success response body for a committed sale.
+ * WhatsApp (x-gezi-source: whatsapp) gets a plain `{ message }` text payload;
+ * every other source gets the standard `{ success, data }` envelope.
+ */
+function serializeSaleResponse(req: Request, result: SaleResult): { statusCode: number; body: Record<string, unknown> } {
   const source = req.headers['x-gezi-source'] ?? req.headers['x-bingwa-source']
   if (source === 'whatsapp') {
-    res.status(201).json({ message: formatSaleWhatsApp(result) })
-    return
+    return { statusCode: 201, body: { message: formatSaleWhatsApp(result) } }
   }
-
-  res.status(201).json({
-    success: true,
-    data: {
-      sale: result.sale,
-      stockRemaining: result.stockRemaining,
-      isLowStock: result.isLowStock,
-      itemUnit: result.itemUnit,
-      stockLines: result.stockLines,
+  return {
+    statusCode: 201,
+    body: {
+      success: true,
+      data: {
+        sale: result.sale,
+        stockRemaining: result.stockRemaining,
+        isLowStock: result.isLowStock,
+        itemUnit: result.itemUnit,
+        stockLines: result.stockLines,
+      },
     },
-  })
-})
+  }
+}
 
 export const handleGetSale = asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenantId!
