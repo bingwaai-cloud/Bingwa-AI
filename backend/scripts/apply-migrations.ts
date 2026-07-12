@@ -26,6 +26,7 @@
  *   020_user_2fa.sql
  *   021_provider_txn_id.sql
  *   022_channel_identities.sql
+ *   023_idempotency_keys.sql
  *
  * Intentionally EXCLUDED:
  *   001_global_schema.sql        — superseded by Prisma baseline (camelCase columns)
@@ -79,6 +80,7 @@ const MIGRATION_FILES: readonly string[] = [
   '020_user_2fa.sql',
   '021_provider_txn_id.sql',
   '022_channel_identities.sql',
+  '023_idempotency_keys.sql',
 ]
 
 // ── Resolve paths ─────────────────────────────────────────────────────────────

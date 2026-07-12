@@ -17,6 +17,7 @@ import {
 } from '../payments/paymentService.js'
 import { getQualityProvider } from '../channels/whatsapp/whatsappQualityProvider.js'
 import { setBroadcastsPaused } from '../services/marketingService.js'
+import { purgeExpiredIdempotencyKeys } from '../repositories/idempotencyRepository.js'
 
 const execAsync = promisify(execCb)
 
@@ -236,6 +237,32 @@ async function runScheduledBackupHeartbeat(): Promise<void> {
 }
 
 /**
+ * Purge expired idempotency key rows (WP-35).
+ * Deletes idempotency_keys older than 24h so the replay cache cannot grow
+ * unbounded. Runs on the OWNER/admin connection (bypasses the FORCE RLS on the
+ * table) via purgeExpiredIdempotencyKeys.
+ *
+ * Wrapper follows the runScheduledBackup pattern: env-independent, error-logged,
+ * and NEVER throws — a failed purge must never crash the scheduler process.
+ */
+async function runIdempotencyKeyPurge(): Promise<void> {
+  const ownerUrl = process.env['OWNER_DATABASE_URL']
+  if (!ownerUrl) {
+    // No owner connection configured — cannot bypass RLS; skip loudly, never throw.
+    logger.warn({ event: 'idempotency_purge_skipped', reason: 'OWNER_DATABASE_URL_not_set' })
+    return
+  }
+
+  try {
+    const deleted = await purgeExpiredIdempotencyKeys(24)
+    logger.info({ event: 'idempotency_purge_completed', deletedRows: deleted })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    logger.error({ event: 'idempotency_purge_failed', err: msg })
+  }
+}
+
+/**
  * Register all cron jobs and start the scheduler.
  * Call once at server startup.
  */
@@ -355,6 +382,19 @@ export function startScheduler(): void {
     { timezone: TIMEZONE }
   )
 
+  // ── Idempotency key purge: daily 03:30 EAT (WP-35) ─────────────────────────
+  // Drops idempotency_keys rows older than 24h so the POS replay cache cannot
+  // grow unbounded. Idempotency-Replayed replays stop after 24h by design.
+  cron.schedule(
+    '30 3 * * *',
+    () => {
+      void runIdempotencyKeyPurge().catch((err) => {
+        logger.error({ event: 'idempotency_purge_unhandled', err })
+      })
+    },
+    { timezone: TIMEZONE }
+  )
+
   logger.info({
     event: 'scheduler_started',
     timezone: TIMEZONE,
@@ -369,6 +409,7 @@ export function startScheduler(): void {
       'quality_monitor   @ :30 every hour',
       'encrypted_backup  @ 03:00 EAT Sunday',
       'backup_heartbeat  @ 09:00 EAT Monday',
+      'idempotency_purge @ 03:30 EAT daily',
     ],
   })
 }

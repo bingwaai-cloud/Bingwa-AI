@@ -29,6 +29,10 @@ import {
   updateTypicalPrice,
 } from '../repositories/itemRepository.js'
 import { linkCustomerToSale } from './customersService.js'
+import {
+  findIdempotencyRecord,
+  insertIdempotencyRecord,
+} from '../repositories/idempotencyRepository.js'
 
 export interface CreateSaleLineParams {
   itemId?: string
@@ -199,6 +203,73 @@ export async function createSaleRecord(
   params: CreateSaleParams
 ): Promise<SaleResult> {
   return withTenant(tenantId, (tx) => createSaleRecordInTransaction(tx, tenantId, params))
+}
+
+/**
+ * WP-35 — server-side sales idempotency.
+ *
+ * Canonical endpoint string stored alongside the key so the unique constraint
+ * (tenant_id, endpoint, key) keeps keys isolated per endpoint. The POS drains
+ * queued sales through POST /api/v1/sales.
+ */
+export const SALES_IDEMPOTENCY_ENDPOINT = 'POST /api/v1/sales'
+
+export interface IdempotencyOutcome {
+  statusCode: number
+  body: Record<string, unknown>
+}
+
+export interface CreateSaleIdempotentParams {
+  tenantId: string
+  endpoint: string
+  idempotencyKey: string
+  saleParams: CreateSaleParams
+  /** Builds the SUCCESS response body from the committed sale. Only 201 bodies are stored. */
+  serialize: (result: SaleResult) => IdempotencyOutcome
+}
+
+/**
+ * Record a sale AND store its 201 response under the idempotency key in the
+ * SAME withTenant() transaction. The sale (header, lines, stock decrement,
+ * price history, receipt, audit) and the key row commit or roll back together.
+ *
+ * On a concurrent duplicate the key INSERT raises Prisma P2002 (unique
+ * violation on (tenant_id, endpoint, key)); the whole transaction — including
+ * the sale — rolls back. The caller catches P2002, re-reads the winning row,
+ * and replays it (see salesController.handleCreateSale). A failed sale throws
+ * BEFORE the insert is reached, so no key row is stored and the request stays
+ * retryable.
+ */
+export async function createSaleRecordWithIdempotency(
+  params: CreateSaleIdempotentParams
+): Promise<IdempotencyOutcome> {
+  return withTenant(params.tenantId, async (tx) => {
+    const result = await createSaleRecordInTransaction(tx, params.tenantId, params.saleParams)
+    const outcome = params.serialize(result)
+    await insertIdempotencyRecord(tx, {
+      tenantId: params.tenantId,
+      endpoint: params.endpoint,
+      key: params.idempotencyKey,
+      responseStatus: outcome.statusCode,
+      responseBody: outcome.body,
+    })
+    return outcome
+  })
+}
+
+/**
+ * Look up a previously stored idempotency response (tenant-scoped read).
+ * Returns null when the key has not been recorded. Used for the replay fast
+ * path and for the concurrent-duplicate recovery after a P2002 rollback.
+ */
+export async function findStoredIdempotency(
+  tenantId: string,
+  endpoint: string,
+  key: string
+): Promise<{ responseStatus: number; responseBody: unknown } | null> {
+  const row = await withTenant(tenantId, (tx) => findIdempotencyRecord(tx, tenantId, endpoint, key))
+  if (!row) return null
+  return { responseStatus: row.responseStatus, responseBody: row.responseBody }
 }
 
 export async function createSaleRecordInTransaction(
